@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">Contribution growth from seed to rainforest</title>
+  <desc id="desc">A stylized landscape showing a glowing seed, young trees, a mature grove, and a deep rainforest canopy.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#f8e9b8"/>
+      <stop offset=".34" stop-color="#b7d7bb"/>
+      <stop offset=".72" stop-color="#456f57"/>
+      <stop offset="1" stop-color="#183827"/>
+    </linearGradient>
+    <radialGradient id="sun" cx=".28" cy=".18" r=".34">
+      <stop offset="0" stop-color="#fff8d8" stop-opacity=".95"/>
+      <stop offset=".45" stop-color="#f1c86b" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#f1c86b" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ground" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#567b4d"/>
+      <stop offset=".5" stop-color="#244337"/>
+      <stop offset="1" stop-color="#11271b"/>
+    </linearGradient>
+    <linearGradient id="trunk" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#8c5a35"/>
+      <stop offset=".55" stop-color="#56351f"/>
+      <stop offset="1" stop-color="#24170f"/>
+    </linearGradient>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="18" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="1200" height="760" fill="url(#sky)"/>
+  <rect width="1200" height="760" fill="url(#sun)"/>
+  <path d="M0 438c120-58 246-68 378-30 132 39 240 34 374-12 162-55 311-34 448 42v322H0z" fill="#305f44" opacity=".82"/>
+  <path d="M0 505c154-59 306-68 456-28 138 37 276 30 414-23 118-45 228-44 330 5v301H0z" fill="#1f4a35" opacity=".94"/>
+  <rect y="596" width="1200" height="164" fill="url(#ground)"/>
+  <ellipse cx="178" cy="628" rx="138" ry="25" fill="#142c1f" opacity=".34"/>
+  <ellipse cx="575" cy="636" rx="230" ry="37" fill="#142c1f" opacity=".34"/>
+  <ellipse cx="986" cy="626" rx="172" ry="31" fill="#142c1f" opacity=".34"/>
+  <path d="M176 600c-20 0-36-9-36-20 0-13 21-23 36-39 15 16 36 26 36 39 0 11-16 20-36 20z" fill="#f1d887" filter="url(#softGlow)"/>
+  <path d="M256 590c13-42 42-82 82-107" fill="none" stroke="#315a32" stroke-width="17" stroke-linecap="round"/>
+  <path d="M336 487c-42-6-70 10-93 45 44 12 78 0 93-45z" fill="#9bc489"/>
+  <path d="M352 483c39-16 76-11 113 16-33 31-72 35-113-16z" fill="#6f936a"/>
+  <path d="M500 640c24-92 30-178 18-258 34 63 62 145 76 258z" fill="url(#trunk)"/>
+  <path d="M625 646c10-95 42-185 99-270-16 92-13 179 9 270z" fill="url(#trunk)"/>
+  <path d="M425 392c31-94 103-142 197-135 80 5 142 58 165 136 73 18 124 72 124 134 0 89-96 139-237 124-104 36-221 20-290-41-83 4-144-37-144-100 0-59 49-108 125-122 16-3 36-1 60 4z" fill="#2f6b48"/>
+  <circle cx="481" cy="367" r="116" fill="#80ad65" opacity=".82"/>
+  <circle cx="616" cy="343" r="133" fill="#446b54"/>
+  <circle cx="733" cy="448" r="119" fill="#1f563a"/>
+  <circle cx="520" cy="506" r="125" fill="#376f49"/>
+  <path d="M810 646c16-123 37-224 63-304 19 103 31 204 36 304z" fill="url(#trunk)"/>
+  <path d="M947 646c-18-130-12-237 19-320 32 101 51 208 57 320z" fill="url(#trunk)"/>
+  <path d="M774 340c69-93 178-118 292-66 95 43 142 120 134 208-9 95-83 163-192 175-93 10-168-16-226-77-70-3-120-46-120-107 0-56 45-110 112-133z" fill="#173f2b"/>
+  <circle cx="861" cy="351" r="126" fill="#2d6a44"/>
+  <circle cx="1005" cy="379" r="155" fill="#123822"/>
+  <circle cx="914" cy="520" r="142" fill="#1d5637"/>
+  <path d="M24 570c66-26 141-37 226-32 111 7 196 34 255 81 116-49 258-55 425-18 103 23 193 22 270-3v162H0V582z" fill="#102a1c" opacity=".5"/>
+  <path d="M78 184c158 36 287 35 387-1 149-54 291-44 426 29 72 39 173 44 309 16v93c-134 23-244 14-330-28-118-57-238-62-361-14-117 45-260 44-431-3z" fill="#fffaf0" opacity=".18"/>
+</svg>
