@@ -45,6 +45,7 @@ describe('prototype API security guardrails', () => {
     expect(login.status).toBe(200)
     const loginBody = await login.json()
     expect(loginBody.user).toEqual(expect.objectContaining({ username: 'David Brown' }))
+    expect(loginBody.sessionToken).toEqual(expect.any(String))
     expect(loginBody.user).not.toHaveProperty('password')
     expect(JSON.stringify(loginBody)).not.toContain('Test123#')
   })
@@ -65,5 +66,30 @@ describe('prototype API security guardrails', () => {
     })
     expect(wrongContentType.status).toBe(415)
     await expect(wrongContentType.json()).resolves.toEqual({ error: 'Request body must be application/json.' })
+  })
+
+  it('requires a valid login session before changing account-owned data', async () => {
+    const base = await startServer()
+
+    const unauthenticated = await fetch(`${base}/api/users/profile`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'http://127.0.0.1:5177' },
+      body: JSON.stringify({ id: 'user-david-brown', username: 'Mallory', country: 'Canada', ageGroup: '36–50' }),
+    })
+    expect(unauthenticated.status).toBe(401)
+
+    const login = await fetch(`${base}/api/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'http://127.0.0.1:5177' },
+      body: JSON.stringify({ username: 'David Brown', password: 'Test123#' }),
+    })
+    const loginBody = await login.json()
+
+    const forbidden = await fetch(`${base}/api/users/profile`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-e4h-session-token': loginBody.sessionToken, origin: 'http://127.0.0.1:5177' },
+      body: JSON.stringify({ id: 'user-anisa-brown', username: 'Mallory', country: 'Canada', ageGroup: '11–15' }),
+    })
+    expect(forbidden.status).toBe(403)
   })
 })

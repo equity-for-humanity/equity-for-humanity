@@ -72,7 +72,8 @@ describe('prototype JSON store', () => {
 
     expect(user.id).toMatch(/^user-/)
     expect(user.username).toBe('New Connector')
-    expect(user.password).toBe('Test123#')
+    expect(user).not.toHaveProperty('password')
+    expect(user.passwordHash).toMatch(/^scrypt:/)
 
     await expect(loginUser(dataPath, { username: 'New Connector', password: 'wrong' })).resolves.toEqual({ ok: false, error: 'Invalid username or password.' })
     await expect(loginUser(dataPath, { username: 'New Connector', password: 'Test123#' })).resolves.toEqual(expect.objectContaining({ ok: true, user: expect.objectContaining({ username: 'New Connector' }) }))
@@ -113,7 +114,8 @@ describe('prototype JSON store', () => {
       connector: 'Lucas Silva',
     })
 
-    expect(user.password).toBe('Test123#')
+    expect(user).not.toHaveProperty('password')
+    expect(user.passwordHash).toMatch(/^scrypt:/)
     await expect(loginUser(dataPath, { username: 'Jonah Hill', password: 'Test123#' })).resolves.toEqual(expect.objectContaining({ ok: true, profile: expect.objectContaining({ name: 'Jonah Hill' }) }))
   })
 
@@ -153,7 +155,9 @@ describe('prototype JSON store', () => {
     const childAfter = snapshot.users.find((user) => user.id === child.id)
     const login = await loginUser(dataPath, { username: 'David Brown Updated', password: 'Better123#' })
 
-    expect(updated.user).toEqual(expect.objectContaining({ username: 'David Brown Updated', password: 'Better123#' }))
+    expect(updated.user).toEqual(expect.objectContaining({ username: 'David Brown Updated' }))
+    expect(updated.user).not.toHaveProperty('password')
+    expect(updated.user.passwordHash).toMatch(/^scrypt:/)
     expect(snapshot.profiles.find((profile) => profile.id === guardian.profileId)).toEqual(expect.objectContaining({ name: 'David Brown Updated' }))
     expect(childAfter).toEqual(expect.objectContaining({ guardianUsername: 'David Brown Updated' }))
     expect(login).toEqual(expect.objectContaining({ ok: true, user: expect.objectContaining({ id: guardian.id }) }))

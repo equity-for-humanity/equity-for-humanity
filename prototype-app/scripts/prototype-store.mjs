@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { dirname } from 'node:path'
 
 export function createSeedData() {
@@ -254,7 +255,7 @@ export async function createUser(dataPath, input) {
   const user = {
     id: `user-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
     username,
-    password,
+    passwordHash: hashPassword(password),
     country: clean(input.country, 'Unspecified'),
     ageGroup: clean(input.ageGroup, 'Unspecified'),
     connector: clean(input.connector, ''),
@@ -285,7 +286,7 @@ export async function loginUser(dataPath, input) {
   const snapshot = await loadSnapshot(dataPath)
   const username = clean(input.username, '')
   const password = clean(input.password, '')
-  const user = snapshot.users.find((item) => item.username.toLowerCase() === username.toLowerCase() && item.password === password)
+  const user = snapshot.users.find((item) => item.username.toLowerCase() === username.toLowerCase() && verifyPassword(password, item))
   if (!user) return { ok: false, error: 'Invalid username or password.' }
   const profile = snapshot.profiles.find((item) => item.id === user.profileId || item.name === user.username)
   const contributions = snapshot.contributions.filter((item) => item.contributorUserId === user.id || item.profileId === user.profileId || item.recognitionName === user.username)
@@ -311,7 +312,8 @@ export async function updateUserProfile(dataPath, input) {
     const password = input.password.trim()
     const passwordIssues = validatePassword(password)
     if (passwordIssues.length > 0) throw new Error(passwordIssues.join(' '))
-    user.password = password
+    user.passwordHash = hashPassword(password)
+    delete user.password
   }
 
   user.country = clean(input.country, user.country)
@@ -548,6 +550,23 @@ function applyContribution(snapshot, contribution) {
 function isUsernameTaken(snapshot, username, exceptUserId = '') {
   const normalized = String(username).trim().toLowerCase()
   return snapshot.users.some((user) => user.id !== exceptUserId && user.username.toLowerCase() === normalized)
+}
+
+export function hashPassword(password) {
+  const salt = randomBytes(16).toString('hex')
+  const hash = scryptSync(String(password), salt, 64).toString('hex')
+  return `scrypt:${salt}:${hash}`
+}
+
+export function verifyPassword(password, user) {
+  if (user.passwordHash?.startsWith('scrypt:')) {
+    const [, salt, storedHash] = user.passwordHash.split(':')
+    if (!salt || !storedHash) return false
+    const candidate = scryptSync(String(password), salt, 64)
+    const stored = Buffer.from(storedHash, 'hex')
+    return stored.length === candidate.length && timingSafeEqual(stored, candidate)
+  }
+  return user.password === password
 }
 
 function clean(value, fallback) {

@@ -26,14 +26,15 @@ type AgeRow = { group: string; people: number }
 type ProfileTypeRow = { type: string; count: number }
 type Funds = typeof dashboardSample
 type ContributionLedgerFocus = { label: string; userIds: string[]; profileIds: string[]; isGuardianView: boolean }
-type LoginResult = { ok: boolean; error?: string; user?: User; profile?: Profile; contributions?: Contribution[]; claims?: ClaimRecord[] }
+type LoginResult = { ok: boolean; error?: string; sessionToken?: string; user?: User; profile?: Profile; contributions?: Contribution[]; claims?: ClaimRecord[] }
 type UpdateUserProfileResult = { ok: boolean; error?: string; user?: User; profile?: Profile }
 type UpdateUserVerificationResult = { ok: boolean; error?: string; user?: User; profile?: Profile }
 type UpdateContributionProfileResult = { ok: boolean; error?: string; profile?: Profile }
 type CreateClaimsResult = { ok: boolean; error?: string; claims?: ClaimRecord[]; contributions?: Contribution[] }
 type PrototypeSnapshot = { users: User[]; profiles: Profile[]; contributions: Contribution[]; claims?: ClaimRecord[]; countries: CountryRow[]; ageGroups: AgeRow[]; profileTypes: ProfileTypeRow[]; funds: Funds }
 
-const API_BASE = import.meta.env.VITE_EFH_API_BASE || 'http://127.0.0.1:8787'
+const PRIVATE_BETA = import.meta.env.VITE_EFH_PRIVATE_BETA === 'true'
+const API_BASE = import.meta.env.VITE_EFH_API_BASE || (PRIVATE_BETA ? '' : 'http://127.0.0.1:8787')
 
 const screens: Array<{ id: ScreenId; label: string }> = [
   { id: 'welcome', label: 'Overview' },
@@ -100,6 +101,7 @@ function App() {
   const [profileMessage, setProfileMessage] = useState('')
   const [accountMessage, setAccountMessage] = useState('')
   const [loggedInUser, setLoggedInUser] = useState<User | null>(null)
+  const [sessionToken, setSessionToken] = useState('')
   const [contributionLedgerFocus, setContributionLedgerFocus] = useState<ContributionLedgerFocus | null>(null)
 
   const [contributionMessage, setContributionMessage] = useState('')
@@ -137,12 +139,12 @@ function App() {
     recycleRate: funds.recycleRate,
   })
 
-  const createUser = async (input: { username: string; password: string; repeatPassword: string; ageGroup: string; country: string; connector: string; guardianUsername?: string }) => {
+  const createUser = async (input: { username: string; password: string; repeatPassword: string; ageGroup: string; country: string; connector: string; guardianUsername?: string; betaAccessCode?: string }) => {
     setAccountMessage('')
     try {
       const response = await fetch(`${API_BASE}/api/users`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...(input.betaAccessCode ? { 'x-e4h-beta-code': input.betaAccessCode } : {}) },
         body: JSON.stringify(input),
       })
       const data = await response.json()
@@ -165,8 +167,9 @@ function App() {
         body: JSON.stringify(input),
       })
       const data = await response.json() as LoginResult
-      if (!response.ok || !data.ok || !data.user) throw new Error(data.error || 'Invalid username or password.')
+      if (!response.ok || !data.ok || !data.user || !data.sessionToken) throw new Error(data.error || 'Invalid username or password.')
       setLoggedInUser(data.user)
+      setSessionToken(data.sessionToken)
       setVerifyMethod('')
       setContributionMessage('')
       setContributionLedgerFocus(null)
@@ -187,6 +190,7 @@ function App() {
 
   const logoutUser = () => {
     setLoggedInUser(null)
+    setSessionToken('')
     setAccountMessage('')
     setContributionMessage('')
     setContributionLedgerFocus(null)
@@ -202,7 +206,7 @@ function App() {
     try {
       const response = await fetch(`${API_BASE}/api/users/profile`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-e4h-session-token': sessionToken },
         body: JSON.stringify({ id: loggedInUser.id, username: patch.username, password: patch.password, country: nextUser.country, ageGroup: nextUser.ageGroup, connector: nextUser.connector ?? '', guardianUsername: nextUser.guardianUsername ?? '' }),
       })
       const data = await response.json() as UpdateUserProfileResult
@@ -225,7 +229,7 @@ function App() {
     try {
       const response = await fetch(`${API_BASE}/api/users/verification`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-e4h-session-token': sessionToken },
         body: JSON.stringify({ id: loggedInUser.id, ...input }),
       })
       const data = await response.json() as UpdateUserVerificationResult
@@ -258,7 +262,7 @@ function App() {
     try {
       const response = await fetch(`${API_BASE}/api/profiles`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-e4h-session-token': sessionToken },
         body: JSON.stringify({ ...profileForm, createdByUserId: loggedInUser?.id ?? '' }),
       })
       if (!response.ok) throw new Error(`API ${response.status}`)
@@ -276,7 +280,7 @@ function App() {
     try {
       const response = await fetch(`${API_BASE}/api/profiles/update`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-e4h-session-token': sessionToken },
         body: JSON.stringify({ id: profileId, userId: loggedInUser?.id ?? '', ...input }),
       })
       const data = await response.json() as UpdateContributionProfileResult
@@ -303,7 +307,7 @@ function App() {
       for (const targetUser of contributionTargets) {
         const response = await fetch(`${API_BASE}/api/contributions`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', 'x-e4h-session-token': sessionToken },
           body: JSON.stringify({
             profileId: selectedRecognitionProfile?.id ?? targetUser.profileId ?? 'manual-profile',
             recognitionName: selectedRecognitionProfile ? recognitionName : targetUser.username,
@@ -350,7 +354,7 @@ function App() {
     try {
       const response = await fetch(`${API_BASE}/api/claims`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-e4h-session-token': sessionToken },
         body: JSON.stringify({ actorUserId: loggedInUser.id, ...input }),
       })
       const data = await response.json() as CreateClaimsResult
@@ -494,7 +498,7 @@ function PasswordField({ label, value, onChange, placeholder }: { label: string;
   return <label>{label}<span className="password-wrap"><input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} type={show ? 'text' : 'password'} /><button type="button" onClick={() => setShow(!show)}>{show ? 'Hide' : 'Show'}</button></span></label>
 }
 
-function ConnectScreen({ accountMessage, claims, contributions, countryOptions, form, loggedInUser, onChange, onClaim, onClearRecognitionProfile, onCreateUser, onLogin, onLogout, onSave, onNext, onSelectRecognitionProfile, onUpdateContributionProfile, onUpdateUserProfile, message, profiles, users }: { accountMessage: string; claims: ClaimRecord[]; contributions: Contribution[]; countryOptions: string[]; form: { name: string; type: string; country: string; ageGroup: string; description: string; connector: string }; loggedInUser: User | null; onChange: (value: { name: string; type: string; country: string; ageGroup: string; description: string; connector: string }) => void; onClaim: () => void; onClearRecognitionProfile: () => void; onCreateUser: (input: { username: string; password: string; repeatPassword: string; ageGroup: string; country: string; connector: string; guardianUsername?: string }) => Promise<{ ok: boolean; error?: string }>; onLogin: (input: { username: string; password: string }) => Promise<{ ok: boolean; error?: string }>; onLogout: () => void; onSave: () => Promise<Profile | null>; onNext: () => void; onSelectRecognitionProfile: (profile: Profile) => void; onUpdateContributionProfile: (profileId: string, input: { name: string; type: string; country: string; description: string }) => Promise<Profile | null>; onUpdateUserProfile: (patch: { username?: string; password?: string; country?: string; ageGroup?: string; connector?: string; guardianUsername?: string }) => Promise<{ ok: boolean; error?: string }>; message: string; profiles: Profile[]; users: User[] }) {
+function ConnectScreen({ accountMessage, claims, contributions, countryOptions, form, loggedInUser, onChange, onClaim, onClearRecognitionProfile, onCreateUser, onLogin, onLogout, onSave, onNext, onSelectRecognitionProfile, onUpdateContributionProfile, onUpdateUserProfile, message, profiles, users }: { accountMessage: string; claims: ClaimRecord[]; contributions: Contribution[]; countryOptions: string[]; form: { name: string; type: string; country: string; ageGroup: string; description: string; connector: string }; loggedInUser: User | null; onChange: (value: { name: string; type: string; country: string; ageGroup: string; description: string; connector: string }) => void; onClaim: () => void; onClearRecognitionProfile: () => void; onCreateUser: (input: { username: string; password: string; repeatPassword: string; ageGroup: string; country: string; connector: string; guardianUsername?: string; betaAccessCode?: string }) => Promise<{ ok: boolean; error?: string }>; onLogin: (input: { username: string; password: string }) => Promise<{ ok: boolean; error?: string }>; onLogout: () => void; onSave: () => Promise<Profile | null>; onNext: () => void; onSelectRecognitionProfile: (profile: Profile) => void; onUpdateContributionProfile: (profileId: string, input: { name: string; type: string; country: string; description: string }) => Promise<Profile | null>; onUpdateUserProfile: (patch: { username?: string; password?: string; country?: string; ageGroup?: string; connector?: string; guardianUsername?: string }) => Promise<{ ok: boolean; error?: string }>; message: string; profiles: Profile[]; users: User[] }) {
   const [showCreateAccount, setShowCreateAccount] = useState(false)
   const [loginUsername, setLoginUsername] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
@@ -504,6 +508,7 @@ function ConnectScreen({ accountMessage, claims, contributions, countryOptions, 
   const [newAgeGroup, setNewAgeGroup] = useState('')
   const [newCountry, setNewCountry] = useState('')
   const [newGuardianUsername, setNewGuardianUsername] = useState('')
+  const [betaAccessCode, setBetaAccessCode] = useState('')
   const [localError, setLocalError] = useState('')
   const [connectorSearch, setConnectorSearch] = useState('')
   const [connectorCountry, setConnectorCountry] = useState('')
@@ -727,13 +732,15 @@ function ConnectScreen({ accountMessage, claims, contributions, countryOptions, 
   }
   const submitCreate = async () => {
     if (!newUsername || !newAgeGroup || !newCountry) return setLocalError('Complete username, age group, and country. Password can stay blank in this prototype and will default to Test123#.')
+    if (PRIVATE_BETA && !betaAccessCode.trim()) return setLocalError('Enter the private beta access code shared with trusted testers.')
     if (passwordIssues.length > 0) return setLocalError(passwordIssues.join(' '))
     if (newPassword && newPassword !== repeatPassword) return setLocalError('Passwords must match.')
-    const result = await onCreateUser({ username: newUsername, password: newPassword, repeatPassword, ageGroup: newAgeGroup, country: newCountry, connector: form.connector, guardianUsername: newGuardianUsername })
+    const result = await onCreateUser({ username: newUsername, password: newPassword, repeatPassword, ageGroup: newAgeGroup, country: newCountry, connector: form.connector, guardianUsername: newGuardianUsername, betaAccessCode })
     if (result.ok) {
       setShowCreateAccount(false)
       setLoginUsername(newUsername)
       setLoginPassword('')
+      setBetaAccessCode('')
       setLocalError('')
     } else setLocalError(result.error ?? 'Could not create account.')
   }
@@ -868,6 +875,7 @@ function ConnectScreen({ accountMessage, claims, contributions, countryOptions, 
             <PasswordField label="Password" value={newPassword} onChange={setNewPassword} placeholder="Optional — defaults to Test123#" />
             <PasswordField label="Repeat password" value={repeatPassword} onChange={setRepeatPassword} placeholder="Repeat only if you typed a password" />
             <div className="password-rules"><strong>Prototype password</strong><span>You can leave password blank. New accounts default to Test123#. If you type a custom password, use at least 8 characters, one capital letter, one number, and one special character.</span>{passwordIssues.length > 0 && <ul>{passwordIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul>}{newPassword && newPassword !== repeatPassword && <p>Passwords must match.</p>}</div>
+            {PRIVATE_BETA && <label>Private beta access code<input value={betaAccessCode} onChange={(event) => setBetaAccessCode(event.target.value)} placeholder="Enter the code shared with trusted testers" type="password" /></label>}
             <label>Age group<select value={newAgeGroup} onChange={(event) => setNewAgeGroup(event.target.value)}><option value="">Select age group or AI agent</option>{ageBrackets.map((age) => <option key={age}>{age}</option>)}</select></label>
             <label>Country<select value={newCountry} onChange={(event) => setNewCountry(event.target.value)}><option value="">Select country</option>{countryOptions.map((country) => <option key={country}>{country}</option>)}</select></label>
             <div className="guardian-picker modal-guardian-picker">

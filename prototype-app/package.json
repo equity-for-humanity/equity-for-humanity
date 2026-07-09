@@ -7,13 +7,18 @@
     "dev": "node scripts/dev-with-api.mjs",
     "dev:vite": "vite",
     "api": "node scripts/prototype-api.mjs",
+    "start": "node scripts/prototype-api.mjs",
     "seed": "node scripts/seed-prototype-data.mjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cf:dev": "wrangler pages dev dist --compatibility-date=2026-07-08",
+    "cf:d1:create": "wrangler d1 create equity-for-humanity-private-beta",
+    "cf:deploy": "npm run build && wrangler pages deploy dist --project-name equity-for-humanity-private-beta"
   },
   "dependencies": {
+    "pg": "^8.22.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

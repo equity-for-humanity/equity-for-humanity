@@ -55,3 +55,5 @@ npm audit
 Plain-language rule: prove eligibility and uniqueness in a future privacy-preserving way; do not warehouse identity in this prototype.
 
 See [`SECURITY.md`](./SECURITY.md) for the current beta guardrails and what would be required before any production deployment.
+
+For hosted private beta deployment, see [`docs/hosted-private-beta.md`](./docs/hosted-private-beta.md). For the recommended Cloudflare-only path, see [`docs/cloudflare-private-beta.md`](./docs/cloudflare-private-beta.md).
