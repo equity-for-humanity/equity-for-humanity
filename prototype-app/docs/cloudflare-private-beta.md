@@ -16,7 +16,7 @@ For a small trusted beta, this should usually fit within Cloudflare's free tiers
 - `functions/api/[[path]].js` — Cloudflare backend API.
 - `functions/_shared/cloudflare-store.js` — D1-backed prototype store.
 - `wrangler.toml` — Cloudflare project config template.
-- `src/App.tsx` — uses same-origin `/api/...` when `VITE_EFH_PRIVATE_BETA=true`.
+- `src/App.tsx` — uses same-origin `/api/...` when `VITE_E4H_PRIVATE_BETA=true`.
 - Private beta code support through `E4H_BETA_ACCESS_CODE`.
 
 ## One-time setup, plain-English version
@@ -59,7 +59,7 @@ In Cloudflare dashboard:
 2. Choose **Create application**.
 3. Choose **Pages**.
 4. Connect your GitHub repo.
-5. Select the EFH repo.
+5. Select the E4H repo.
 6. Set the app folder/root to:
 
 ```text
@@ -83,7 +83,7 @@ dist
 In the Cloudflare Pages project settings, add:
 
 ```bash
-VITE_EFH_PRIVATE_BETA=true
+VITE_E4H_PRIVATE_BETA=true
 E4H_ALLOWED_ORIGINS=https://<your-pages-url>,https://app.equityforhumanity.org
 ```
 

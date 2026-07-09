@@ -18,7 +18,7 @@ npm run dev
 - App: <http://127.0.0.1:5177/>
 - Local JSON API: <http://127.0.0.1:8787/api/snapshot>
 
-The public landing page can link to the local beta app, but a static website cannot start a visitor's local Node backend. For public demos, deploy a hosted frontend and hosted HTTPS API, then set `VITE_EFH_API_BASE` to that API URL.
+The public landing page can link to the local beta app, but a static website cannot start a visitor's local Node backend. For public demos, deploy a hosted frontend and hosted HTTPS API, then set `VITE_E4H_API_BASE` to that API URL.
 
 ## Verify
 

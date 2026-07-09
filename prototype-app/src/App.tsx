@@ -33,8 +33,8 @@ type UpdateContributionProfileResult = { ok: boolean; error?: string; profile?: 
 type CreateClaimsResult = { ok: boolean; error?: string; claims?: ClaimRecord[]; contributions?: Contribution[] }
 type PrototypeSnapshot = { users: User[]; profiles: Profile[]; contributions: Contribution[]; claims?: ClaimRecord[]; countries: CountryRow[]; ageGroups: AgeRow[]; profileTypes: ProfileTypeRow[]; funds: Funds }
 
-const PRIVATE_BETA = import.meta.env.VITE_EFH_PRIVATE_BETA === 'true'
-const API_BASE = import.meta.env.VITE_EFH_API_BASE || (PRIVATE_BETA ? '' : 'http://127.0.0.1:8787')
+const PRIVATE_BETA = import.meta.env.VITE_E4H_PRIVATE_BETA === 'true'
+const API_BASE = import.meta.env.VITE_E4H_API_BASE || (PRIVATE_BETA ? '' : 'http://127.0.0.1:8787')
 
 const screens: Array<{ id: ScreenId; label: string }> = [
   { id: 'welcome', label: 'Overview' },

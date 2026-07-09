@@ -35,8 +35,8 @@ E4H_ALLOWED_ORIGINS=http://127.0.0.1:5177,http://localhost:5177
 E4H_BETA_ACCESS_CODE=
 E4H_STORE=json
 DATABASE_URL=
-VITE_EFH_API_BASE=http://127.0.0.1:8787
-VITE_EFH_PRIVATE_BETA=false
+VITE_E4H_API_BASE=http://127.0.0.1:8787
+VITE_E4H_PRIVATE_BETA=false
 ```
 
 ## What is still not production-secure
@@ -52,4 +52,4 @@ Before any broad public launch with real users or real data, replace or extend t
 
 ## Landing-page integration
 
-A public static website cannot start a visitor's local Node backend. For the beta, the landing page can link to the local app URL only after the tester has started `npm run dev`. For a public demo, deploy the frontend and backend to hosted infrastructure and point `VITE_EFH_API_BASE` to the hosted HTTPS API.
+A public static website cannot start a visitor's local Node backend. For the beta, the landing page can link to the local app URL only after the tester has started `npm run dev`. For a public demo, deploy the frontend and backend to hosted infrastructure and point `VITE_E4H_API_BASE` to the hosted HTTPS API.

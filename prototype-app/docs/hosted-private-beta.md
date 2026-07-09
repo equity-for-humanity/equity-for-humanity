@@ -12,8 +12,8 @@ This is the recommended next step before any public production launch. It gives 
 
 ## What the code now supports
 
-- `VITE_EFH_API_BASE` points the hosted frontend to the hosted API.
-- `VITE_EFH_PRIVATE_BETA=true` shows a private beta access-code field in the create-account modal.
+- `VITE_E4H_API_BASE` points the hosted frontend to the hosted API.
+- `VITE_E4H_PRIVATE_BETA=true` shows a private beta access-code field in the create-account modal.
 - `E4H_BETA_ACCESS_CODE` makes the API reject account creation unless the tester submits the code.
 - `E4H_STORE=postgres` stores the prototype state in a Postgres `prototype_state` table as JSONB.
 - `DATABASE_URL` connects the hosted API to Supabase/Neon/Render/Railway Postgres.
@@ -47,8 +47,8 @@ npm start
 Set these on Vercel/Netlify for the app build:
 
 ```bash
-VITE_EFH_API_BASE=https://<api-hostname>
-VITE_EFH_PRIVATE_BETA=true
+VITE_E4H_API_BASE=https://<api-hostname>
+VITE_E4H_PRIVATE_BETA=true
 ```
 
 Build command:
