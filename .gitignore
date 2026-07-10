@@ -12,3 +12,25 @@ index.final-v1*.html
 
 # Local notes can stay private unless intentionally published
 WORKING_NOTES.md
+
+# Public repository policy: publish only the approved E4H documents.
+# Keep all working drafts, research, operational notes, and local documentation private.
+*.md
+!/README.md
+/docs/*
+!/docs/current/
+!/docs/planning/
+/docs/current/*
+!docs/current/equity-for-humanity-administration-principles-v0.1.md
+!docs/current/equity-for-humanity-founding-concept-v1.0.md
+!docs/current/equity-for-humanity-philosophy-and-scale-v1.5.md
+/docs/planning/*
+!docs/planning/e4h-global-human-flourishing-index-proposal-v0.2.md
+
+# Local agent/tool state, private working assets, and personal documents.
+/.agents/
+/.claude/
+/.codex/
+/brand/
+/prototype-app/.wrangler/
+*.pages

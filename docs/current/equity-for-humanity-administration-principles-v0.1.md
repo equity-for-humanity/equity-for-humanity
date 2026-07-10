@@ -1,7 +1,7 @@
 # Equity for Humanity — Administration and Stewardship Principles v0.1
 
-**Status:** Working draft for public review  
-**Purpose:** Define how Equity for Humanity will administer resources fairly, sustainably, transparently, and with best-in-class efficiency.  
+**Status:** Working draft for public review
+**Purpose:** Define how Equity for Humanity will administer resources fairly, sustainably, transparently, and with best-in-class efficiency.
 **Core idea:** Equity for Humanity will be strong, not fragile; hyper-efficient, not extractive; agentic-first, but human-accountable.
 
 ---
