@@ -34,3 +34,9 @@ WORKING_NOTES.md
 /brand/
 /prototype-app/.wrangler/
 *.pages
+
+# Prototype local-only (never publish)
+prototype-app/artifacts/
+prototype-app/data/
+prototype-app/.env
+.env

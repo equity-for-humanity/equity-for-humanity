@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 import {
   ageGroupSamples as fallbackAgeGroupSamples,
@@ -8,27 +8,35 @@ import {
   profileTypeSamples as fallbackProfileTypeSamples,
 } from './mockData'
 import {
+  calculateContributionAccounting,
   calculatePayoutScenario,
   formatCompactMoney,
   formatMoney,
+  splitContributionEqually,
   type AllocationMode,
 } from './model'
-import { createSimulatedVerificationDraft, type AgeBracket, type VerificationMethod } from './verificationAdapter'
+import { protectedPrototypeVerificationData, type VerificationMethod } from './verificationAdapter'
 
 type ScreenId = 'welcome' | 'connect' | 'contribute' | 'claim' | 'compound' | 'recognition'
 type ContributionAssetType = 'Dollars' | 'Crypto asset' | 'Stock'
-type User = { id: string; username: string; password?: string; country: string; ageGroup: string; connector?: string; guardianUsername?: string; profileId?: string; createdAt?: string; verifiedHumanAt?: string; verificationMethod?: VerificationMethod; verificationStatus?: '16_plus' | '0_15' | 'dependent' }
+type ContributionProfileForm = { name: string; type: string; country: string; ageGroup: string; description: string; connector: string }
+type GuardianConnectionStatus = 'pending' | 'accepted' | 'declined'
+type ClaimPathway = 'claim-for-self' | 'parent-guardian-must-claim'
+type GuardianConnection = { guardianUserId: string; guardianUsername: string; guardianStatus: GuardianConnectionStatus; guardianRequestedAt?: string; guardianRespondedAt?: string }
+type ChildWardDraftAction = 'accepted' | 'declined' | 'remove'
+type ChildWardDraftChange = { childUserId: string; action: ChildWardDraftAction }
+type User = { id: string; username: string; password?: string; country: string; ageGroup: string; connector?: string; connectorSelfDirected?: boolean; guardianConnections?: GuardianConnection[]; guardianUserId?: string; guardianUsername?: string; guardianStatus?: GuardianConnectionStatus | ''; guardianRequestedAt?: string; guardianRespondedAt?: string; profileId?: string; createdAt?: string; verifiedHumanAt?: string; verificationMethod?: VerificationMethod; verificationStatus?: ClaimPathway }
 type Profile = { id: string; name: string; type: string; country: string; ageGroup: string; description: string; connector: string; createdAt?: string; createdByUserId?: string }
-type Contribution = { id: string; recognitionName: string; amount: number; humanityFund: number; stewardshipReserve: number; country: string; ageGroup: string; contributorUserId?: string; profileId?: string; paymentMethod?: string; sourceClaimId?: string; createdAt?: string; isAnonymous?: boolean; anonymousAlias?: string }
-type ClaimRecord = { id: string; actorUserId?: string; userId?: string; profileId: string; targetName?: string; amount: number; action: 'claimed' | 'recycled'; deliveryMethod?: string; denomination?: string; country?: string; ageGroup?: string; createdAt?: string }
+type Contribution = { id: string; recognitionName: string; amount: number; humanityFund: number; stewardshipReserve: number; country: string; ageGroup: string; contributorUserId?: string; actorUserId?: string; contributedByName?: string; profileId?: string; paymentMethod?: string; sourceClaimId?: string; recordKind?: 'contribution' | 'recycled-benefit'; simulation?: boolean; createdAt?: string; isAnonymous?: boolean; anonymousAlias?: string }
+type ClaimRecord = { id: string; actorUserId?: string; userId?: string; profileId: string; targetName?: string; amount: number; action: 'claimed' | 'recycled'; recordKind?: 'claimed-benefit' | 'recycled-benefit'; simulation?: boolean; deliveryMethod?: string; denomination?: string; country?: string; ageGroup?: string; createdAt?: string }
 type CountryRow = { country: string; people: number; contributions: number; connectors: number; claimants: number }
 type AgeRow = { group: string; people: number }
 type ProfileTypeRow = { type: string; count: number }
 type Funds = typeof dashboardSample
-type ContributionLedgerFocus = { label: string; userIds: string[]; profileIds: string[]; isGuardianView: boolean }
 type LoginResult = { ok: boolean; error?: string; sessionToken?: string; user?: User; profile?: Profile; contributions?: Contribution[]; claims?: ClaimRecord[] }
 type UpdateUserProfileResult = { ok: boolean; error?: string; user?: User; profile?: Profile }
 type UpdateUserVerificationResult = { ok: boolean; error?: string; user?: User; profile?: Profile }
+type GuardianConnectionResult = { ok: boolean; error?: string; child?: User; guardian?: User }
 type UpdateContributionProfileResult = { ok: boolean; error?: string; profile?: Profile }
 type CreateClaimsResult = { ok: boolean; error?: string; claims?: ClaimRecord[]; contributions?: Contribution[] }
 type PrototypeSnapshot = { users: User[]; profiles: Profile[]; contributions: Contribution[]; claims?: ClaimRecord[]; countries: CountryRow[]; ageGroups: AgeRow[]; profileTypes: ProfileTypeRow[]; funds: Funds }
@@ -86,6 +94,43 @@ const ageBrackets = ['AI agent', '0–5', '6–10', '11–15', '16–20', '21–
 const countryOptions = ['Afghanistan', 'Albania', 'Algeria', 'Argentina', 'Australia', 'Bangladesh', 'Brazil', 'Canada', 'China', 'Colombia', 'Democratic Republic of the Congo', 'Egypt', 'Ethiopia', 'France', 'Germany', 'Ghana', 'India', 'Indonesia', 'Iran', 'Iraq', 'Italy', 'Japan', 'Kenya', 'Lebanon', 'Mexico', 'Morocco', 'Nigeria', 'Pakistan', 'Philippines', 'Poland', 'Russia', 'Saudi Arabia', 'South Africa', 'South Korea', 'Spain', 'Sweden', 'Tanzania', 'Turkey', 'Ukraine', 'United Kingdom', 'United States', 'Vietnam', 'Digital']
 const VT_FIVE_YEAR_AVERAGE_GROWTH = 10
 const MINIMUM_CLAIM_DOLLARS = 0.05
+const MAX_DIRECT_GUARDIAN_CONNECTIONS = 2
+const MAX_ACTIVE_CHILD_WARD_CONNECTIONS = 10
+
+function getGuardianConnections(user: User | null | undefined): GuardianConnection[] {
+  const source = Array.isArray(user?.guardianConnections)
+    ? user.guardianConnections
+    : user?.guardianUserId
+      ? [{
+          guardianUserId: user.guardianUserId,
+          guardianUsername: user.guardianUsername ?? '',
+          guardianStatus: user.guardianStatus === 'accepted' || user.guardianStatus === 'declined' ? user.guardianStatus : 'pending',
+          guardianRequestedAt: user.guardianRequestedAt,
+          guardianRespondedAt: user.guardianRespondedAt,
+        }]
+      : []
+  const seenGuardianIds = new Set<string>()
+  return source.flatMap((connection) => {
+    if (!connection?.guardianUserId || seenGuardianIds.has(connection.guardianUserId)) return []
+    seenGuardianIds.add(connection.guardianUserId)
+    const guardianStatus: GuardianConnectionStatus = connection.guardianStatus === 'accepted' || connection.guardianStatus === 'declined' ? connection.guardianStatus : 'pending'
+    return [{
+      guardianUserId: connection.guardianUserId,
+      guardianUsername: connection.guardianUsername ?? '',
+      guardianStatus,
+      guardianRequestedAt: connection.guardianRequestedAt,
+      guardianRespondedAt: connection.guardianRespondedAt,
+    }]
+  }).slice(0, MAX_DIRECT_GUARDIAN_CONNECTIONS)
+}
+
+function hasGuardianConnection(user: User | null | undefined, guardianUserId: string | undefined, status?: GuardianConnectionStatus) {
+  return Boolean(guardianUserId && getGuardianConnections(user).some((connection) => connection.guardianUserId === guardianUserId && (!status || connection.guardianStatus === status)))
+}
+
+function guardianConnectionKey(connections: GuardianConnection[]) {
+  return connections.map((connection) => `${connection.guardianUserId}:${connection.guardianStatus}`).join('|')
+}
 
 function App() {
   const [screen, setScreen] = useState<ScreenId>('welcome')
@@ -95,15 +140,13 @@ function App() {
   const [contributionAmount, setContributionAmount] = useState('')
   const [contributionAssetType, setContributionAssetType] = useState<ContributionAssetType>('Dollars')
   const [verifyMethod, setVerifyMethod] = useState<VerificationMethod>('')
-  const [ageBracket, setAgeBracket] = useState<AgeBracket>('18_plus')
+
   const [profileForm, setProfileForm] = useState({ name: '', type: '', country: '', ageGroup: '', description: '', connector: '' })
   const [activeProfile, setActiveProfile] = useState<Profile | null>(null)
   const [profileMessage, setProfileMessage] = useState('')
   const [accountMessage, setAccountMessage] = useState('')
   const [loggedInUser, setLoggedInUser] = useState<User | null>(null)
   const [sessionToken, setSessionToken] = useState('')
-  const [contributionLedgerFocus, setContributionLedgerFocus] = useState<ContributionLedgerFocus | null>(null)
-
   const [contributionMessage, setContributionMessage] = useState('')
   const [recognitionName, setRecognitionName] = useState('Prototype participant')
   const [paymentMethod, setPaymentMethod] = useState('')
@@ -131,15 +174,14 @@ function App() {
   const contributions = snapshot?.contributions ?? []
 
   const contributionAmountValue = Number(contributionAmount) || 0
-  const verificationDraft = createSimulatedVerificationDraft(verifyMethod || 'government-id-liveness', ageBracket)
   const claimPreview = calculatePayoutScenario({
     endowmentValue: funds.currentEndowment,
     averageGrowth: funds.averageGrowth,
-    activeClaimants: 100_000,
+    activeClaimants: Math.max(1, funds.activeClaimants),
     recycleRate: funds.recycleRate,
   })
 
-  const createUser = async (input: { username: string; password: string; repeatPassword: string; ageGroup: string; country: string; connector: string; guardianUsername?: string; betaAccessCode?: string }) => {
+  const createUser = async (input: { username: string; password: string; repeatPassword: string; ageGroup: string; country: string; connector: string; guardianUserIds?: string[]; betaAccessCode?: string }) => {
     setAccountMessage('')
     try {
       const response = await fetch(`${API_BASE}/api/users`, {
@@ -172,7 +214,6 @@ function App() {
       setSessionToken(data.sessionToken)
       setVerifyMethod('')
       setContributionMessage('')
-      setContributionLedgerFocus(null)
       if (data.profile) {
         setProfileForm((current) => ({ ...current, country: data.profile?.country ?? '', ageGroup: data.profile?.ageGroup ?? '', connector: data.profile?.connector ?? '' }))
       } else {
@@ -193,21 +234,17 @@ function App() {
     setSessionToken('')
     setAccountMessage('')
     setContributionMessage('')
-    setContributionLedgerFocus(null)
     setVerifyMethod('')
   }
 
-  const updateLoggedInUserProfile = async (patch: { username?: string; password?: string; country?: string; ageGroup?: string; connector?: string; guardianUsername?: string }) => {
+  const updateLoggedInUserProfile = async (patch: { username?: string; password?: string; country?: string; ageGroup?: string; connector?: string; connectorSelfDirected?: boolean }) => {
     if (!loggedInUser) return { ok: false, error: 'No logged-in user.' }
     const nextUser = { ...loggedInUser, ...patch }
-    setLoggedInUser(nextUser)
-    setProfileForm((current) => ({ ...current, country: nextUser.country, ageGroup: nextUser.ageGroup, connector: nextUser.connector ?? '' }))
-    if (activeProfile) setActiveProfile({ ...activeProfile, country: nextUser.country, ageGroup: nextUser.ageGroup, connector: nextUser.connector ?? '' })
     try {
       const response = await fetch(`${API_BASE}/api/users/profile`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-e4h-session-token': sessionToken },
-        body: JSON.stringify({ id: loggedInUser.id, username: patch.username, password: patch.password, country: nextUser.country, ageGroup: nextUser.ageGroup, connector: nextUser.connector ?? '', guardianUsername: nextUser.guardianUsername ?? '' }),
+        body: JSON.stringify({ id: loggedInUser.id, username: patch.username, password: patch.password, country: nextUser.country, ageGroup: nextUser.ageGroup, connector: nextUser.connector ?? '', connectorSelfDirected: patch.connectorSelfDirected }),
       })
       const data = await response.json() as UpdateUserProfileResult
       if (!response.ok || !data.ok || !data.user) throw new Error(data.error || `API ${response.status}`)
@@ -224,7 +261,66 @@ function App() {
   }
 
 
-  const updateLoggedInUserVerification = async (input: { verificationMethod: VerificationMethod; verificationStatus: '16_plus' | '0_15' | 'dependent'; guardianUsername: string }) => {
+  const requestGuardianConnection = async (guardianUserId: string): Promise<GuardianConnectionResult> => {
+    if (!loggedInUser) return { ok: false, error: 'Please log in before requesting a parent / guardian connection.' }
+    try {
+      const response = await fetch(`${API_BASE}/api/guardian-connections/request`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-e4h-session-token': sessionToken },
+        body: JSON.stringify({ guardianUserId }),
+      })
+      const data = await response.json() as GuardianConnectionResult
+      if (!response.ok || !data.ok || !data.child) throw new Error(data.error || `API ${response.status}`)
+      setLoggedInUser(data.child)
+      await refreshSnapshot()
+      return data
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not submit the parent / guardian request.'
+      setAccountMessage(message)
+      return { ok: false, error: message }
+    }
+  }
+
+  const respondGuardianConnection = async (childUserId: string, decision: 'accepted' | 'declined'): Promise<GuardianConnectionResult> => {
+    if (!loggedInUser) return { ok: false, error: 'Please log in before responding to a parent / guardian request.' }
+    try {
+      const response = await fetch(`${API_BASE}/api/guardian-connections/respond`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-e4h-session-token': sessionToken },
+        body: JSON.stringify({ childUserId, decision }),
+      })
+      const data = await response.json() as GuardianConnectionResult
+      if (!response.ok || !data.ok || !data.child) throw new Error(data.error || `API ${response.status}`)
+      await refreshSnapshot()
+      return data
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not respond to the parent / guardian request.'
+      setAccountMessage(message)
+      return { ok: false, error: message }
+    }
+  }
+
+  const removeGuardianConnection = async (childUserId: string, guardianUserId?: string): Promise<GuardianConnectionResult> => {
+    if (!loggedInUser) return { ok: false, error: 'Please log in before removing a parent / guardian connection.' }
+    try {
+      const response = await fetch(`${API_BASE}/api/guardian-connections/remove`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-e4h-session-token': sessionToken },
+        body: JSON.stringify({ childUserId, guardianUserId }),
+      })
+      const data = await response.json() as GuardianConnectionResult
+      if (!response.ok || !data.ok || !data.child) throw new Error(data.error || `API ${response.status}`)
+      if (data.child.id === loggedInUser.id) setLoggedInUser(data.child)
+      await refreshSnapshot()
+      return data
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not remove the parent / guardian connection.'
+      setAccountMessage(message)
+      return { ok: false, error: message }
+    }
+  }
+
+  const updateLoggedInUserVerification = async (input: { verificationMethod: VerificationMethod }) => {
     if (!loggedInUser) return { ok: false, error: 'Please log in before saving verified-human status.' }
     try {
       const response = await fetch(`${API_BASE}/api/users/verification`, {
@@ -294,48 +390,41 @@ function App() {
     }
   }
 
-  const saveContribution = async (contributionValue = contributionAmountValue, contributionPaymentMethod = paymentMethod, targetUsers?: User[], isAnonymous = false) => {
+  const saveContribution = async (contributionValue = contributionAmountValue, contributionPaymentMethod = paymentMethod, targetUsers?: User[], isAnonymous = false, recognitionProfile: Profile | null = null) => {
     if (!loggedInUser) {
       setContributionMessage('Please sign in first, or create a login and profile in Connect before making a contribution.')
       return false
     }
-    const selectedRecognitionProfile = activeProfile && activeProfile.id !== loggedInUser.profileId ? activeProfile : null
+    const selectedRecognitionProfile = recognitionProfile && recognitionProfile.id !== loggedInUser.profileId ? recognitionProfile : null
     const contributionTargets = targetUsers && targetUsers.length > 0 ? targetUsers : [loggedInUser]
+    const contributionAmounts = splitContributionEqually(contributionValue, contributionTargets.length)
     setContributionMessage('Saving simulated contribution…')
     try {
       const savedContributions: Contribution[] = []
-      for (const targetUser of contributionTargets) {
+      for (const [targetIndex, targetUser] of contributionTargets.entries()) {
         const response = await fetch(`${API_BASE}/api/contributions`, {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-e4h-session-token': sessionToken },
           body: JSON.stringify({
             profileId: selectedRecognitionProfile?.id ?? targetUser.profileId ?? 'manual-profile',
             recognitionName: selectedRecognitionProfile ? recognitionName : targetUser.username,
-            amount: contributionValue,
+            amount: contributionAmounts[targetIndex],
             allocationMode,
             paymentMethod: contributionPaymentMethod,
             stewardshipTip: 0,
-            contributorUserId: targetUser.id,
+            contributorUserId: loggedInUser.id,
             country: selectedRecognitionProfile?.country ?? targetUser.country ?? profileForm.country,
             ageGroup: selectedRecognitionProfile?.ageGroup ?? targetUser.ageGroup ?? profileForm.ageGroup,
-            isAnonymous: isAnonymous && contributionTargets.length === 1 && targetUser.id === loggedInUser.id && !selectedRecognitionProfile,
+            isAnonymous,
           }),
         })
         if (!response.ok) throw new Error(`API ${response.status}`)
         savedContributions.push(await response.json() as Contribution)
       }
-      const targetNames = contributionTargets.map((target) => target.username)
-      const isGuardianView = contributionTargets.some((target) => target.id !== loggedInUser.id)
-      if (isGuardianView) {
-        setContributionLedgerFocus({
-          label: targetNames.length === 1 ? targetNames[0] : 'Selected dependents',
-          userIds: contributionTargets.map((target) => target.id),
-          profileIds: contributionTargets.map((target) => target.profileId).filter(Boolean) as string[],
-          isGuardianView,
-        })
-      } else setContributionLedgerFocus(null)
+      const targetNames = selectedRecognitionProfile ? [selectedRecognitionProfile.name] : contributionTargets.map((target) => target.username)
+      const isOnBehalfOfAnother = Boolean(selectedRecognitionProfile || contributionTargets.some((target) => target.id !== loggedInUser.id))
       const totalSaved = savedContributions.reduce((total, contribution) => total + contribution.amount, 0)
-      const behalfText = isGuardianView ? ` on behalf of ${targetNames.join(', ')}` : ''
+      const behalfText = isOnBehalfOfAnother ? ` on behalf of ${targetNames.join(', ')}` : ''
       setContributionMessage(`Saved ${formatMoney(totalSaved)} contribution${savedContributions.length === 1 ? '' : 's'}${behalfText}. Thank you for your generosity.`)
       setContributionAmount('')
       setContributionAssetType('Dollars')
@@ -349,13 +438,13 @@ function App() {
     }
   }
 
-  const saveClaims = async (input: { action: 'claimed' | 'recycled'; amount: number; targetUserIds: string[]; deliveryMethod?: string; denomination?: string; allocationMode?: AllocationMode; isAnonymous?: boolean }) => {
+  const saveClaims = async (input: { action: 'claimed' | 'recycled'; amount: number; targetUserIds: string[]; deliveryMethod?: string; denomination?: string; allocationMode?: AllocationMode; isAnonymous?: boolean; recycleDestinations?: Array<{ profileId: string }> }) => {
     if (!loggedInUser) return { ok: false, error: 'Please sign in before making a claim.' }
     try {
       const response = await fetch(`${API_BASE}/api/claims`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-e4h-session-token': sessionToken },
-        body: JSON.stringify({ actorUserId: loggedInUser.id, ...input }),
+        body: JSON.stringify(input),
       })
       const data = await response.json() as CreateClaimsResult
       if (!response.ok || !data.ok) throw new Error(data.error || `API ${response.status}`)
@@ -367,19 +456,12 @@ function App() {
         setPaymentMethod('')
         const fundLabel = allocationOptions.find((option) => option.id === (input.allocationMode ?? 'humanity'))?.label ?? 'Humanity Fund'
         const recycledClaims = data.claims ?? []
-        const recycledNames = recycledClaims.map((claim) => claim.targetName ?? 'selected person')
-        const focusLabel = recycledNames.length === 1 ? recycledNames[0] : 'Selected dependents'
-        const isGuardianView = recycledClaims.some((claim) => claim.userId && claim.userId !== loggedInUser.id)
-        setContributionLedgerFocus(recycledClaims.length > 0 ? {
-          label: focusLabel,
-          userIds: recycledClaims.map((claim) => claim.userId).filter(Boolean) as string[],
-          profileIds: recycledClaims.map((claim) => claim.profileId).filter(Boolean),
-          isGuardianView,
-        } : null)
-        const behalfText = recycledNames.length > 0 ? ` on behalf of ${recycledNames.join(', ')}` : ''
-        const accountText = isGuardianView && recycledNames.length === 1 ? ` Go to ${recycledNames[0]}'s account to see it there.` : isGuardianView ? ' Go to each child or dependent account to see it there.' : ''
+        const benefitSourceNames = [...new Set(recycledClaims.map((claim) => claim.targetName ?? 'selected participant'))]
+        const recipientNames = [...new Set((data.contributions ?? []).map((contribution) => contribution.recognitionName || 'selected recipient'))]
+        const sourceText = benefitSourceNames.length > 0 ? ` for ${benefitSourceNames.join(', ')}` : ''
+        const recipientText = recipientNames.length > 0 ? ` Contribution credit goes to ${recipientNames.join(', ')}.` : ''
         const aliasText = input.isAnonymous && data.contributions?.[0]?.anonymousAlias ? ` anonymously under ${data.contributions[0].anonymousAlias}` : ''
-        setContributionMessage(`Recycled ${formatMoney(input.amount * input.targetUserIds.length)}${aliasText} into ${fundLabel}${behalfText}. The contribution ledger now includes ${input.targetUserIds.length} recycled claim entr${input.targetUserIds.length === 1 ? 'y' : 'ies'}.${accountText}`)
+        setContributionMessage(`Recycled ${formatMoney(input.amount * input.targetUserIds.length)} benefit${sourceText} into ${fundLabel}${aliasText}.${recipientText} The corresponding participant and recognition ledgers are updated.`)
         setScreen('contribute')
       }
       return { ok: true, claims: data.claims ?? [], contributions: data.contributions ?? [] }
@@ -391,7 +473,7 @@ function App() {
 
   return (
     <div className="app-shell">
-      <header className="hero-panel" id="top">
+      <header className={`hero-panel ${screen === 'welcome' ? 'hero-panel-full' : 'hero-panel-compact'}`} id="top">
         <nav className="topbar" aria-label="Prototype navigation">
           <a className="brand" href="#top" onClick={() => setScreen('welcome')}>
             <img src="/equity-for-humanity-logo.svg" alt="Equity for Humanity" />
@@ -439,9 +521,9 @@ function App() {
 
         <section className="screen-panel">
           {screen === 'welcome' && <WelcomeScreen onJump={setScreen} />}
-          {screen === 'connect' && <ConnectScreen accountMessage={accountMessage} claims={snapshot?.claims ?? []} contributions={contributions} countryOptions={countryOptions} form={profileForm} loggedInUser={loggedInUser} message={profileMessage} onChange={setProfileForm} onClaim={() => setScreen('claim')} onClearRecognitionProfile={clearRecognitionProfile} onCreateUser={createUser} onLogin={loginUser} onLogout={logoutUser} onNext={() => setScreen('contribute')} onSave={saveProfile} onSelectRecognitionProfile={selectRecognitionProfile} onUpdateContributionProfile={updateContributionProfile} onUpdateUserProfile={updateLoggedInUserProfile} profiles={snapshot?.profiles ?? []} users={snapshot?.users ?? []} />}
-          {screen === 'contribute' && <ContributeScreen activeProfile={activeProfile && activeProfile.id !== loggedInUser?.profileId ? activeProfile : null} amount={contributionAmount} assetType={contributionAssetType} contributions={contributions} ledgerFocus={contributionLedgerFocus} loggedInUser={loggedInUser} message={contributionMessage} mode={allocationMode} onBack={() => setScreen('connect')} onNext={() => setScreen('claim')} onSave={saveContribution} paymentMethod={paymentMethod} recognitionName={recognitionName} setAmount={setContributionAmount} setAssetType={setContributionAssetType} setMode={setAllocationMode} setPaymentMethod={setPaymentMethod} setRecognitionName={setRecognitionName} users={snapshot?.users ?? []} />}
-          {screen === 'claim' && <ClaimScreen claimPreview={claimPreview} claims={snapshot?.claims ?? []} dependents={snapshot?.users ?? []} funds={funds} loggedInUser={loggedInUser} method={verifyMethod} onBack={() => setScreen('contribute')} onNext={() => setScreen('compound')} onSaveClaims={saveClaims} onVerifyHuman={updateLoggedInUserVerification} setAgeBracket={setAgeBracket} setMethod={setVerifyMethod} users={snapshot?.users ?? []} verificationDraft={verificationDraft} />}
+          {screen === 'connect' && <ConnectScreen accountMessage={accountMessage} claims={snapshot?.claims ?? []} contributions={contributions} countryOptions={countryOptions} loggedInUser={loggedInUser} onClaim={() => setScreen('claim')} onCreateUser={createUser} onLogin={loginUser} onLogout={logoutUser} onNext={() => setScreen('contribute')} onUpdateUserProfile={updateLoggedInUserProfile} onRequestGuardianConnection={requestGuardianConnection} onRespondGuardianConnection={respondGuardianConnection} onRemoveGuardianConnection={removeGuardianConnection} users={snapshot?.users ?? []} />}
+          {screen === 'contribute' && <ContributeScreen activeProfile={activeProfile && activeProfile.id !== loggedInUser?.profileId ? activeProfile : null} amount={contributionAmount} assetType={contributionAssetType} contributions={contributions} countryOptions={countryOptions} form={profileForm} loggedInUser={loggedInUser} message={contributionMessage} mode={allocationMode} onBack={() => setScreen('connect')} onChangeProfileForm={setProfileForm} onClearRecognitionProfile={clearRecognitionProfile} onNext={() => setScreen('claim')} onSave={saveContribution} onSaveProfile={saveProfile} onSelectRecognitionProfile={selectRecognitionProfile} onUpdateContributionProfile={updateContributionProfile} paymentMethod={paymentMethod} profileMessage={profileMessage} profiles={snapshot?.profiles ?? []} setAmount={setContributionAmount} setAssetType={setContributionAssetType} setMode={setAllocationMode} setPaymentMethod={setPaymentMethod} users={snapshot?.users ?? []} />}
+          {screen === 'claim' && <ClaimScreen claimPreview={claimPreview} claims={snapshot?.claims ?? []} funds={funds} loggedInUser={loggedInUser} method={verifyMethod} onBack={() => setScreen('contribute')} onNext={() => setScreen('compound')} onSaveClaims={saveClaims} onVerifyHuman={updateLoggedInUserVerification} profiles={snapshot?.profiles ?? []} setMethod={setVerifyMethod} users={snapshot?.users ?? []} />}
           {screen === 'compound' && <CompoundScreen averageGrowth={averageGrowth} claims={snapshot?.claims ?? []} contributions={contributions} loggedInUser={loggedInUser} onBack={() => setScreen('claim')} onNext={() => setScreen('recognition')} onRefresh={refreshSnapshot} setAverageGrowth={setAverageGrowth} users={snapshot?.users ?? []} />}
           {screen === 'recognition' && <RecognitionScreen ageRows={ageRows} claims={snapshot?.claims ?? []} contributions={contributions} countries={countries} funds={funds} loggedInUser={loggedInUser} onBack={() => setScreen('compound')} profileRows={profileRows} profiles={snapshot?.profiles ?? []} users={snapshot?.users ?? []} />}
           {screen !== 'welcome' && <div className="nav-actions bottom-logout-actions"><LogoutNavButton loggedInUser={loggedInUser} onLoginClick={() => { setScreen('connect'); window.setTimeout(() => document.getElementById('connect-login-card')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 0) }} onLogout={logoutUser} /></div>}
@@ -498,7 +580,7 @@ function PasswordField({ label, value, onChange, placeholder }: { label: string;
   return <label>{label}<span className="password-wrap"><input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} type={show ? 'text' : 'password'} /><button type="button" onClick={() => setShow(!show)}>{show ? 'Hide' : 'Show'}</button></span></label>
 }
 
-function ConnectScreen({ accountMessage, claims, contributions, countryOptions, form, loggedInUser, onChange, onClaim, onClearRecognitionProfile, onCreateUser, onLogin, onLogout, onSave, onNext, onSelectRecognitionProfile, onUpdateContributionProfile, onUpdateUserProfile, message, profiles, users }: { accountMessage: string; claims: ClaimRecord[]; contributions: Contribution[]; countryOptions: string[]; form: { name: string; type: string; country: string; ageGroup: string; description: string; connector: string }; loggedInUser: User | null; onChange: (value: { name: string; type: string; country: string; ageGroup: string; description: string; connector: string }) => void; onClaim: () => void; onClearRecognitionProfile: () => void; onCreateUser: (input: { username: string; password: string; repeatPassword: string; ageGroup: string; country: string; connector: string; guardianUsername?: string; betaAccessCode?: string }) => Promise<{ ok: boolean; error?: string }>; onLogin: (input: { username: string; password: string }) => Promise<{ ok: boolean; error?: string }>; onLogout: () => void; onSave: () => Promise<Profile | null>; onNext: () => void; onSelectRecognitionProfile: (profile: Profile) => void; onUpdateContributionProfile: (profileId: string, input: { name: string; type: string; country: string; description: string }) => Promise<Profile | null>; onUpdateUserProfile: (patch: { username?: string; password?: string; country?: string; ageGroup?: string; connector?: string; guardianUsername?: string }) => Promise<{ ok: boolean; error?: string }>; message: string; profiles: Profile[]; users: User[] }) {
+function ConnectScreen({ accountMessage, claims, contributions, countryOptions, loggedInUser, onClaim, onCreateUser, onLogin, onLogout, onNext, onUpdateUserProfile, onRequestGuardianConnection, onRespondGuardianConnection, onRemoveGuardianConnection, users }: { accountMessage: string; claims: ClaimRecord[]; contributions: Contribution[]; countryOptions: string[]; loggedInUser: User | null; onClaim: () => void; onCreateUser: (input: { username: string; password: string; repeatPassword: string; ageGroup: string; country: string; connector: string; guardianUserIds?: string[]; betaAccessCode?: string }) => Promise<{ ok: boolean; error?: string }>; onLogin: (input: { username: string; password: string }) => Promise<{ ok: boolean; error?: string }>; onLogout: () => void; onNext: () => void; onUpdateUserProfile: (patch: { username?: string; password?: string; country?: string; ageGroup?: string; connector?: string; connectorSelfDirected?: boolean }) => Promise<{ ok: boolean; error?: string }>; onRequestGuardianConnection: (guardianUserId: string) => Promise<GuardianConnectionResult>; onRespondGuardianConnection: (childUserId: string, decision: 'accepted' | 'declined') => Promise<GuardianConnectionResult>; onRemoveGuardianConnection: (childUserId: string, guardianUserId?: string) => Promise<GuardianConnectionResult>; users: User[] }) {
   const [showCreateAccount, setShowCreateAccount] = useState(false)
   const [loginUsername, setLoginUsername] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
@@ -507,7 +589,7 @@ function ConnectScreen({ accountMessage, claims, contributions, countryOptions, 
   const [repeatPassword, setRepeatPassword] = useState('')
   const [newAgeGroup, setNewAgeGroup] = useState('')
   const [newCountry, setNewCountry] = useState('')
-  const [newGuardianUsername, setNewGuardianUsername] = useState('')
+  const [newGuardianConnections, setNewGuardianConnections] = useState<GuardianConnection[]>([])
   const [betaAccessCode, setBetaAccessCode] = useState('')
   const [localError, setLocalError] = useState('')
   const [connectorSearch, setConnectorSearch] = useState('')
@@ -519,23 +601,18 @@ function ConnectScreen({ accountMessage, claims, contributions, countryOptions, 
   const [draftPassword, setDraftPassword] = useState('')
   const [draftRepeatPassword, setDraftRepeatPassword] = useState('')
   const [draftConnector, setDraftConnector] = useState('')
-  const [draftGuardianUsername, setDraftGuardianUsername] = useState('')
+  const [draftConnectorSelfDirected, setDraftConnectorSelfDirected] = useState(false)
+  const [draftGuardianConnections, setDraftGuardianConnections] = useState<GuardianConnection[]>([])
+  const [guardianSelectionConfirmed, setGuardianSelectionConfirmed] = useState(false)
+  const [childWardDraftChanges, setChildWardDraftChanges] = useState<ChildWardDraftChange[]>([])
   const [guardianSearch, setGuardianSearch] = useState('')
   const [guardianCountry, setGuardianCountry] = useState('')
   const [guardianAgeGroup, setGuardianAgeGroup] = useState('')
-  const [selfDirectedSelected, setSelfDirectedSelected] = useState(false)
   const [profileUpdateMessage, setProfileUpdateMessage] = useState('')
-  const [profileMode, setProfileMode] = useState<'search' | 'create' | 'modify'>('search')
-  const [profileTypeFilter, setProfileTypeFilter] = useState('')
-  const [profileCountryFilter, setProfileCountryFilter] = useState('')
-  const [profileSearch, setProfileSearch] = useState('')
-  const [draftRecognitionProfile, setDraftRecognitionProfile] = useState<Profile | null>(null)
-  const [recognitionMessage, setRecognitionMessage] = useState('')
-  const [recognitionAction, setRecognitionAction] = useState<'confirmed' | 'cleared' | ''>('')
-  const [profileBeingModified, setProfileBeingModified] = useState<Profile | null>(null)
-  const [profileCreateErrors, setProfileCreateErrors] = useState<{ type?: string; name?: string; country?: string }>({})
-
-  const update = (field: keyof typeof form, value: string) => onChange({ ...form, [field]: value })
+  const [connectorUpdateMessage, setConnectorUpdateMessage] = useState('')
+  const [accountEditorOpen, setAccountEditorOpen] = useState(false)
+  const [guardianEditorOpen, setGuardianEditorOpen] = useState(false)
+  const [connectorEditorOpen, setConnectorEditorOpen] = useState(false)
   useEffect(() => {
     setDraftCountry(loggedInUser?.country ?? '')
     setDraftAgeGroup(loggedInUser?.ageGroup ?? '')
@@ -543,21 +620,23 @@ function ConnectScreen({ accountMessage, claims, contributions, countryOptions, 
     setDraftPassword('')
     setDraftRepeatPassword('')
     setDraftConnector(loggedInUser?.connector === loggedInUser?.username ? '' : loggedInUser?.connector ?? '')
-    setDraftGuardianUsername(loggedInUser?.guardianUsername ?? '')
-    setGuardianSearch(loggedInUser?.guardianUsername ?? '')
-    setSelfDirectedSelected(false)
+    setDraftConnectorSelfDirected(Boolean(loggedInUser?.connectorSelfDirected && !loggedInUser?.connector))
+    setDraftGuardianConnections(getGuardianConnections(loggedInUser))
+    setGuardianSelectionConfirmed(false)
+    setChildWardDraftChanges([])
+    setGuardianSearch('')
     setProfileUpdateMessage('')
+    setConnectorUpdateMessage('')
+    setAccountEditorOpen(false)
+    setGuardianEditorOpen(false)
+    setConnectorEditorOpen(false)
   }, [loggedInUser])
-  useEffect(() => {
-    if (!form.name) return
-    const selected = profiles.find((profile) => profile.name === form.name && (!form.country || profile.country === form.country))
-    if (!selected) return
-    setDraftRecognitionProfile(selected)
-    setProfileTypeFilter(selected.type)
-    setProfileCountryFilter(selected.country)
-    setProfileSearch(selected.name)
-  }, [form.country, form.name, profiles])
   const loginMatches = loginUsername ? users.filter((user) => user.username.toLowerCase().startsWith(loginUsername.toLowerCase())).slice(0, 6) : []
+  const savedGuardianConnections = getGuardianConnections(loggedInUser)
+  const acceptedChildren = users.filter((user) => hasGuardianConnection(user, loggedInUser?.id, 'accepted'))
+  const pendingGuardianRequests = users.filter((user) => hasGuardianConnection(user, loggedInUser?.id, 'pending'))
+  const activeChildWardCount = acceptedChildren.length + pendingGuardianRequests.length
+  const parentGuardianSelectionLocked = acceptedChildren.length > 0
   const connectorMatches = users.filter((user) => {
     const isLoggedInUser = Boolean(loggedInUser && user.username === loggedInUser.username)
     const matchesText = !connectorSearch || user.username.toLowerCase().startsWith(connectorSearch.toLowerCase())
@@ -571,44 +650,15 @@ function ConnectScreen({ accountMessage, claims, contributions, countryOptions, 
     const matchesText = !guardianSearch || user.username.toLowerCase().startsWith(guardianSearch.toLowerCase())
     const matchesCountry = !guardianCountry || user.country === guardianCountry
     const matchesAge = !guardianAgeGroup || user.ageGroup === guardianAgeGroup
-    return !isLoggedInUser && !isNewAccountUser && matchesText && matchesCountry && matchesAge
+    return !isLoggedInUser && !isNewAccountUser && (!loggedInUser || !parentGuardianSelectionLocked) && matchesText && matchesCountry && matchesAge
   }).slice(0, 6)
-  const hasProfileFilters = Boolean(profileTypeFilter || profileCountryFilter || profileSearch)
-  const matchesProfileSearch = (profile: Profile) => {
-    const matchesType = !profileTypeFilter || profile.type === profileTypeFilter
-    const matchesCountry = !profileCountryFilter || profile.country === profileCountryFilter
-    const haystack = `${profile.name} ${profile.country} ${profile.description}`.toLowerCase()
-    return matchesType && matchesCountry && haystack.includes(profileSearch.toLowerCase())
-  }
-  const profileSearchRank = (profile: Profile) => {
-    const needle = profileSearch.toLowerCase()
-    const name = profile.name.toLowerCase()
-    if (!needle) return 2
-    if (name.startsWith(needle)) return 0
-    if (name.includes(needle)) return 1
-    return 2
-  }
-  const profileMatches = hasProfileFilters ? profiles.filter(matchesProfileSearch).sort((a, b) => profileSearchRank(a) - profileSearchRank(b) || a.name.localeCompare(b.name)) : []
+  const activeChildWardCountFor = (guardianUserId: string) => users.filter((user) => getGuardianConnections(user).some((connection) => connection.guardianUserId === guardianUserId && (connection.guardianStatus === 'pending' || connection.guardianStatus === 'accepted'))).length
   const passwordIssues = validatePasswordDraft(newPassword)
   const draftPasswordIssues = validatePasswordDraft(draftPassword)
-  const personalContributions = loggedInUser ? contributions.filter((item) => item.contributorUserId === loggedInUser.id || item.profileId === loggedInUser.profileId || item.recognitionName === loggedInUser.username) : []
+  const personalContributions = getSelfContributions(contributions, loggedInUser)
   const personalClaims = loggedInUser ? claims.filter((item) => item.userId === loggedInUser.id || item.profileId === loggedInUser.profileId || item.targetName === loggedInUser.username) : []
   const personalContributionTotal = personalContributions.reduce((total, item) => total + item.amount, 0)
   const personalClaimTotal = personalClaims.reduce((total, item) => total + item.amount, 0)
-  const ownedContributionProfiles = loggedInUser ? profiles.filter((profile) => profile.createdByUserId === loggedInUser.id).sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')) : []
-  const canManageDraftRecognitionProfile = Boolean(draftRecognitionProfile?.createdByUserId && loggedInUser?.id && draftRecognitionProfile.createdByUserId === loggedInUser.id)
-  const resetContributionProfileForm = () => {
-    onChange({ ...form, name: '', type: '', country: '', ageGroup: '', description: '' })
-    setProfileCreateErrors({})
-    setProfileBeingModified(null)
-  }
-  const handleProfileModeChange = (mode: 'search' | 'create' | 'modify') => {
-    setProfileMode(mode)
-    setRecognitionMessage('')
-    setRecognitionAction('')
-    if (mode === 'create') resetContributionProfileForm()
-    if (mode !== 'modify') setProfileBeingModified(null)
-  }
   const handleLogout = () => {
     setLoginUsername('')
     setLoginPassword('')
@@ -616,131 +666,206 @@ function ConnectScreen({ accountMessage, claims, contributions, countryOptions, 
   }
   const hasConnectorFilters = Boolean(connectorSearch || connectorCountry || connectorAgeGroup)
   const hasGuardianFilters = Boolean(guardianSearch || guardianCountry || guardianAgeGroup)
-  const profileDraftChanged = Boolean(loggedInUser && (draftUsername !== loggedInUser.username || Boolean(draftPassword || draftRepeatPassword) || draftCountry !== loggedInUser.country || draftAgeGroup !== loggedInUser.ageGroup || draftConnector !== (loggedInUser.connector ?? '') || draftGuardianUsername !== (loggedInUser.guardianUsername ?? '') || selfDirectedSelected))
+  const accountProfileDraftChanged = Boolean(loggedInUser && (draftUsername !== loggedInUser.username || Boolean(draftPassword || draftRepeatPassword) || draftCountry !== loggedInUser.country || draftAgeGroup !== loggedInUser.ageGroup))
+  const savedConnector = loggedInUser?.connector === loggedInUser?.username ? '' : loggedInUser?.connector ?? ''
+  const savedConnectorSelfDirected = Boolean(loggedInUser?.connectorSelfDirected && !savedConnector)
+  const connectorDraftChanged = Boolean(loggedInUser && (draftConnector !== savedConnector || draftConnectorSelfDirected !== savedConnectorSelfDirected))
+  const guardianDraftChanged = Boolean(loggedInUser && guardianConnectionKey(draftGuardianConnections) !== guardianConnectionKey(savedGuardianConnections))
+  const guardianDraftRemovals = savedGuardianConnections.filter((connection) => !draftGuardianConnections.some((draftConnection) => draftConnection.guardianUserId === connection.guardianUserId))
+  const guardianDraftRequests = draftGuardianConnections.filter((connection) => {
+    const savedConnection = savedGuardianConnections.find((saved) => saved.guardianUserId === connection.guardianUserId)
+    return !savedConnection || (savedConnection.guardianStatus === 'declined' && connection.guardianStatus === 'pending')
+  })
+  const guardianRemovalOnly = guardianDraftRemovals.length > 0 && guardianDraftRequests.length === 0
+  const guardianRemovalIsPending = guardianRemovalOnly && guardianDraftRemovals.every((connection) => connection.guardianStatus === 'pending')
+  const guardianRemovalIsAccepted = guardianRemovalOnly && guardianDraftRemovals.every((connection) => connection.guardianStatus === 'accepted')
+  const childWardDraftChangeFor = (childUserId: string) => childWardDraftChanges.find((change) => change.childUserId === childUserId)
+  const discardConnectorDraft = () => {
+    setDraftConnector(savedConnector)
+    setDraftConnectorSelfDirected(savedConnectorSelfDirected)
+    setConnectorSearch('')
+    setConnectorCountry('')
+    setConnectorAgeGroup('')
+    setConnectorEditorOpen(false)
+    setConnectorUpdateMessage('')
+  }
+  const toggleConnectorEditor = () => {
+    if (connectorEditorOpen) return discardConnectorDraft()
+    setConnectorEditorOpen(true)
+    setConnectorUpdateMessage('')
+  }
   const clearConnector = () => {
     setDraftConnector('')
-    setSelfDirectedSelected(false)
+    setDraftConnectorSelfDirected(false)
     setConnectorSearch('')
-    update('connector', '')
-    setProfileUpdateMessage('Connector cleared locally. Press Confirm update to save it.')
+    setConnectorUpdateMessage('Connector cleared locally. Confirm connector update to save it.')
   }
   const selectConnector = (user: User) => {
     if (loggedInUser && user.username === loggedInUser.username) return
     setDraftConnector(user.username)
-    setSelfDirectedSelected(false)
+    setDraftConnectorSelfDirected(false)
     setConnectorSearch(user.username)
-    update('connector', user.username)
-    if (loggedInUser) setProfileUpdateMessage('Connector selected locally. Press Confirm update to save it.')
+    setConnectorUpdateMessage('Connector selected locally. Confirm connector update to save it.')
   }
   const selectGuardian = (user: User) => {
-    if (loggedInUser && user.username === loggedInUser.username) return
-    setDraftGuardianUsername(user.username)
-    setNewGuardianUsername(user.username)
+    if (loggedInUser && user.id === loggedInUser.id) return
+    const guardianAtChildWardCapacity = activeChildWardCountFor(user.id) >= MAX_ACTIVE_CHILD_WARD_CONNECTIONS
+    if (loggedInUser) {
+      if (parentGuardianSelectionLocked) return setProfileUpdateMessage('An account with an accepted child / ward connection cannot identify a parent / guardian.')
+      const existing = draftGuardianConnections.find((connection) => connection.guardianUserId === user.id)
+      if (existing?.guardianStatus === 'declined') {
+        if (guardianAtChildWardCapacity) return setProfileUpdateMessage(`This parent / guardian already has the maximum of ${MAX_ACTIVE_CHILD_WARD_CONNECTIONS} active child / ward connections.`)
+        setDraftGuardianConnections((connections) => connections.map((connection) => connection.guardianUserId === user.id ? { ...connection, guardianStatus: 'pending', guardianRequestedAt: '', guardianRespondedAt: '' } : connection))
+        setGuardianSelectionConfirmed(false)
+        setProfileUpdateMessage('Parent / guardian request staged again. Confirm the request for their acceptance.')
+        return
+      }
+      if (existing) return setProfileUpdateMessage('This parent / guardian account is already selected.')
+      if (guardianAtChildWardCapacity) return setProfileUpdateMessage(`This parent / guardian already has the maximum of ${MAX_ACTIVE_CHILD_WARD_CONNECTIONS} active child / ward connections.`)
+      if (draftGuardianConnections.length >= MAX_DIRECT_GUARDIAN_CONNECTIONS) return setProfileUpdateMessage('You can identify at most two direct parent / guardian accounts.')
+      setDraftGuardianConnections((connections) => [...connections, { guardianUserId: user.id, guardianUsername: user.username, guardianStatus: 'pending' }])
+      setGuardianSelectionConfirmed(false)
+      setGuardianSearch(user.username)
+      setProfileUpdateMessage('Parent / guardian selected locally. Confirm the request for their acceptance.')
+      return
+    }
+    if (newGuardianConnections.some((connection) => connection.guardianUserId === user.id)) return setLocalError('This parent / guardian account is already selected.')
+    if (guardianAtChildWardCapacity) return setLocalError(`This parent / guardian already has the maximum of ${MAX_ACTIVE_CHILD_WARD_CONNECTIONS} active child / ward connections.`)
+    if (newGuardianConnections.length >= MAX_DIRECT_GUARDIAN_CONNECTIONS) return setLocalError('You can identify at most two direct parent / guardian accounts.')
+    setNewGuardianConnections((connections) => [...connections, { guardianUserId: user.id, guardianUsername: user.username, guardianStatus: 'pending' }])
     setGuardianSearch(user.username)
-    setProfileUpdateMessage(loggedInUser ? 'Parent / guardian selected locally. Press Confirm update to save it.' : '')
   }
-  const clearGuardian = () => {
-    setDraftGuardianUsername('')
-    setNewGuardianUsername('')
+  const clearGuardian = (guardianUserId: string) => {
+    if (loggedInUser) {
+      setDraftGuardianConnections((connections) => connections.filter((connection) => connection.guardianUserId !== guardianUserId))
+      setGuardianSelectionConfirmed(false)
+      setProfileUpdateMessage('Parent / guardian selection cleared locally. Confirm the change to remove it.')
+      return
+    }
+    setNewGuardianConnections((connections) => connections.filter((connection) => connection.guardianUserId !== guardianUserId))
     setGuardianSearch('')
-    setProfileUpdateMessage(loggedInUser ? 'Parent / guardian cleared locally. Press Confirm update to save it.' : '')
+  }
+  const discardGuardianConnectionDraft = () => {
+    setDraftGuardianConnections(savedGuardianConnections)
+    setGuardianSelectionConfirmed(false)
+    setChildWardDraftChanges([])
+    setGuardianSearch('')
+    setGuardianCountry('')
+    setGuardianAgeGroup('')
+    setGuardianEditorOpen(false)
+    setProfileUpdateMessage('')
+  }
+  const toggleGuardianEditor = () => {
+    if (guardianEditorOpen) return discardGuardianConnectionDraft()
+    setGuardianEditorOpen(true)
   }
   const selectSelfDirectedConnection = () => {
     setDraftConnector('')
-    setSelfDirectedSelected(true)
+    setDraftConnectorSelfDirected(true)
     setConnectorSearch('')
-    update('connector', '')
-    setProfileUpdateMessage('')
+    setConnectorEditorOpen(false)
+    setConnectorUpdateMessage('You found Equity for Humanity yourself. Confirm connector update to save it.')
   }
   const confirmProfileUpdate = async () => {
     if (!draftUsername.trim()) return setProfileUpdateMessage('Username is required.')
     if (draftPasswordIssues.length > 0) return setProfileUpdateMessage(draftPasswordIssues.join(' '))
     if (draftPassword && draftPassword !== draftRepeatPassword) return setProfileUpdateMessage('Passwords must match.')
-    const safeConnector = draftConnector === loggedInUser?.username ? '' : draftConnector
-    const result = await onUpdateUserProfile({ username: draftUsername, password: draftPassword, country: draftCountry, ageGroup: draftAgeGroup, connector: safeConnector, guardianUsername: draftGuardianUsername })
-    if (result.ok) setSelfDirectedSelected(false)
-    if (result.ok) { setDraftPassword(''); setDraftRepeatPassword('') }
+    setProfileUpdateMessage('Saving prototype profile update...')
+    const result = await onUpdateUserProfile({ username: draftUsername, password: draftPassword, country: draftCountry, ageGroup: draftAgeGroup })
+    if (result.ok) { setDraftPassword(''); setDraftRepeatPassword(''); setAccountEditorOpen(false) }
     const usernameChanged = result.ok && draftUsername.trim() !== loggedInUser?.username
     setProfileUpdateMessage(result.ok ? usernameChanged ? 'Username updated. This account, contribution history, claims, connector links, and parent / guardian links stayed attached.' : 'Updated.' : result.error ?? 'Could not update profile.')
   }
-  const stageRecognitionProfile = (profile: Profile) => {
-    setDraftRecognitionProfile(profile)
-    setProfileTypeFilter(profile.type)
-    setProfileCountryFilter(profile.country)
-    setProfileSearch(profile.name)
-    setRecognitionMessage('Press confirm to use this profile for the contribution.')
-    setRecognitionAction('')
-  }
-  const confirmRecognitionProfile = () => {
-    if (!draftRecognitionProfile) return
-    onSelectRecognitionProfile(draftRecognitionProfile)
-    setRecognitionMessage(`Confirmed contribution profile: ${draftRecognitionProfile.name}.`)
-    setRecognitionAction('confirmed')
-  }
-  const clearRecognitionSelection = () => {
-    setDraftRecognitionProfile(null)
-    setProfileTypeFilter('')
-    setProfileCountryFilter('')
-    setProfileSearch('')
-    setRecognitionMessage('Contribution profile cleared.')
-    setRecognitionAction('cleared')
-    onClearRecognitionProfile()
-  }
-  const saveCreatedProfile = async () => {
-    const nextErrors = {
-      type: form.type ? undefined : 'Select a contribution profile type.',
-      name: form.name.trim() ? undefined : 'Name is required.',
-      country: form.country ? undefined : 'Select a country.',
+  const confirmConnectorUpdate = async () => {
+    const safeConnector = draftConnector === loggedInUser?.username ? '' : draftConnector
+    const connectorSelfDirected = Boolean(draftConnectorSelfDirected && !safeConnector)
+    setConnectorUpdateMessage('Saving connector update...')
+    const result = await onUpdateUserProfile({ connector: safeConnector, connectorSelfDirected })
+    if (result.ok) {
+      setConnectorEditorOpen(false)
+      setDraftConnectorSelfDirected(connectorSelfDirected)
     }
-    setProfileCreateErrors(nextErrors)
-    if (nextErrors.type || nextErrors.name || nextErrors.country) {
-      setRecognitionMessage('Complete the required contribution profile fields before saving.')
-      if (nextErrors.type) document.getElementById('contribution-profile-type')?.focus()
-      else if (nextErrors.country) document.getElementById('contribution-profile-country')?.focus()
-      else document.getElementById('contribution-profile-name')?.focus()
-      return
-    }
-    const profile = await onSave()
-    if (!profile) return
-    setProfileMode('search')
-    stageRecognitionProfile(profile)
-    setRecognitionMessage('Profile saved. Confirm this profile to contribute on behalf of it.')
-    setProfileCreateErrors({})
-    onChange({ ...form, name: '', type: '', country: '', ageGroup: '', description: '' })
+    setConnectorUpdateMessage(result.ok ? safeConnector ? 'Connector updated.' : connectorSelfDirected ? 'You found Equity for Humanity yourself.' : 'No connector identified.' : result.error ?? 'Could not update connector.')
   }
-  const selectProfileToModify = (profile: Profile) => {
-    setProfileBeingModified(profile)
-    onChange({ ...form, name: profile.name, type: profile.type, country: profile.country, ageGroup: profile.ageGroup, description: profile.description })
-    setProfileCreateErrors({})
-    setRecognitionMessage('Modify this contribution profile, then save changes.')
-    setRecognitionAction('')
-  }
-  const saveModifiedProfile = async () => {
-    if (!profileBeingModified) return
-    const nextErrors = {
-      type: form.type ? undefined : 'Select a contribution profile type.',
-      name: form.name.trim() ? undefined : 'Name is required.',
-      country: form.country ? undefined : 'Select a country.',
+  const confirmGuardianConnection = async () => {
+    if (!loggedInUser) return
+    if (!guardianDraftChanged) return setProfileUpdateMessage('Choose a parent / guardian change before confirming it.')
+    if (parentGuardianSelectionLocked && guardianDraftRequests.length > 0) return setProfileUpdateMessage('An account with an accepted child / ward connection cannot identify a parent / guardian.')
+    if (guardianDraftRequests.length > 0 && !guardianSelectionConfirmed) return setProfileUpdateMessage('Confirm the parent / guardian selection before submitting the request.')
+    setProfileUpdateMessage('Confirming parent / guardian update...')
+    for (const connection of guardianDraftRemovals) {
+      const result = await onRemoveGuardianConnection(loggedInUser.id, connection.guardianUserId)
+      if (!result.ok) return setProfileUpdateMessage(result.error ?? 'Could not remove parent / guardian connection.')
     }
-    setProfileCreateErrors(nextErrors)
-    if (nextErrors.type || nextErrors.name || nextErrors.country) return
-    const profile = await onUpdateContributionProfile(profileBeingModified.id, { name: form.name, type: form.type, country: form.country, description: form.description })
-    if (!profile) return
-    setProfileBeingModified(profile)
-    stageRecognitionProfile(profile)
-    setRecognitionMessage('Contribution profile updated.')
+    for (const connection of guardianDraftRequests) {
+      const result = await onRequestGuardianConnection(connection.guardianUserId)
+      if (!result.ok) return setProfileUpdateMessage(result.error ?? 'Could not confirm parent / guardian request.')
+    }
+    setGuardianEditorOpen(false)
+    setGuardianCountry('')
+    setGuardianAgeGroup('')
+    setProfileUpdateMessage(guardianDraftRequests.length > 0 ? 'Each selected parent / guardian must accept this request before it becomes a connection.' : 'Parent / guardian connection removed.')
+  }
+  const confirmGuardianSelection = () => {
+    if (!guardianDraftChanged || guardianDraftRequests.length === 0) return setProfileUpdateMessage('Choose a new or declined parent / guardian selection before confirming it.')
+    if (parentGuardianSelectionLocked) return setProfileUpdateMessage('An account with an accepted child / ward connection cannot identify a parent / guardian.')
+    setGuardianSelectionConfirmed(true)
+    setProfileUpdateMessage('Parent / guardian selection confirmed. Submit the request when ready; each selected account must still accept it.')
+  }
+  const stageChildWardUpdate = (childUserId: string, action: ChildWardDraftAction) => {
+    setChildWardDraftChanges((changes) => [...changes.filter((change) => change.childUserId !== childUserId), { childUserId, action }])
+    const message = action === 'accepted'
+      ? 'Child / ward acceptance staged locally.'
+      : action === 'declined'
+        ? 'Child / ward decline staged locally.'
+        : 'Child / ward removal staged locally.'
+    setProfileUpdateMessage(`${message} Confirm child / ward update to save it.`)
+  }
+  const clearChildWardDraftUpdate = (childUserId: string) => {
+    setChildWardDraftChanges((changes) => changes.filter((change) => change.childUserId !== childUserId))
+    setProfileUpdateMessage('Child / ward update cleared locally. No child / ward connection changed.')
+  }
+  const discardChildWardDraftUpdates = () => {
+    setChildWardDraftChanges([])
+    setProfileUpdateMessage('Child / ward update cancelled. No child / ward connection changed.')
+  }
+  const confirmChildWardUpdates = async () => {
+    if (!loggedInUser || childWardDraftChanges.length === 0) return setProfileUpdateMessage('Choose a child / ward update before confirming it.')
+    setProfileUpdateMessage('Confirming child / ward update...')
+    const confirmedChildWardIds = new Set<string>()
+    const retainUnconfirmedChildWardUpdates = () => {
+      setChildWardDraftChanges((changes) => changes.filter((change) => !confirmedChildWardIds.has(change.childUserId)))
+    }
+    const handleChildWardUpdateFailure = (message: string) => {
+      retainUnconfirmedChildWardUpdates()
+      const confirmedCount = confirmedChildWardIds.size
+      return setProfileUpdateMessage(confirmedCount > 0 ? `${confirmedCount} child / ward update${confirmedCount === 1 ? '' : 's'} confirmed. ${message}` : message)
+    }
+    for (const change of childWardDraftChanges.filter((change) => change.action === 'remove')) {
+      const result = await onRemoveGuardianConnection(change.childUserId, loggedInUser.id)
+      if (!result.ok) return handleChildWardUpdateFailure(result.error ?? 'Could not remove child / ward connection.')
+      confirmedChildWardIds.add(change.childUserId)
+    }
+    for (const change of childWardDraftChanges.filter((change) => change.action !== 'remove')) {
+      const decision = change.action === 'accepted' ? 'accepted' : 'declined'
+      const result = await onRespondGuardianConnection(change.childUserId, decision)
+      if (!result.ok) return handleChildWardUpdateFailure(result.error ?? 'Could not update child / ward connection.')
+      confirmedChildWardIds.add(change.childUserId)
+    }
+    setChildWardDraftChanges([])
+    setProfileUpdateMessage('Child / ward update confirmed.')
   }
   const submitCreate = async () => {
-    if (!newUsername || !newAgeGroup || !newCountry) return setLocalError('Complete username, age group, and country. Password can stay blank in this prototype and will default to Test123#.')
-    if (PRIVATE_BETA && !betaAccessCode.trim()) return setLocalError('Enter the private beta access code shared with trusted testers.')
+    if (!newUsername || !newAgeGroup || !newCountry || !newPassword) return setLocalError('Complete username, password, age group, and country.')
     if (passwordIssues.length > 0) return setLocalError(passwordIssues.join(' '))
-    if (newPassword && newPassword !== repeatPassword) return setLocalError('Passwords must match.')
-    const result = await onCreateUser({ username: newUsername, password: newPassword, repeatPassword, ageGroup: newAgeGroup, country: newCountry, connector: form.connector, guardianUsername: newGuardianUsername, betaAccessCode })
+    if (newPassword !== repeatPassword) return setLocalError('Passwords must match.')
+    if (PRIVATE_BETA && !betaAccessCode.trim()) return setLocalError('Enter the private beta access code shared with trusted testers.')
+    const result = await onCreateUser({ username: newUsername, password: newPassword, repeatPassword, ageGroup: newAgeGroup, country: newCountry, connector: '', guardianUserIds: newGuardianConnections.map((connection) => connection.guardianUserId), betaAccessCode })
     if (result.ok) {
       setShowCreateAccount(false)
       setLoginUsername(newUsername)
       setLoginPassword('')
-      setBetaAccessCode('')
+      setNewGuardianConnections([])
       setLocalError('')
     } else setLocalError(result.error ?? 'Could not create account.')
   }
@@ -757,7 +882,7 @@ function ConnectScreen({ accountMessage, claims, contributions, countryOptions, 
             <div className="form-stack">
               <label>Username<input value={loginUsername} onChange={(event) => setLoginUsername(event.target.value)} placeholder="Start typing your username" type="search" /></label>
               {loginMatches.length > 0 && <div className="result-list compact-results">{loginMatches.map((user) => <button key={user.id} type="button" onClick={() => setLoginUsername(user.username)}>{user.username}</button>)}</div>}
-              <PasswordField label="Password" value={loginPassword} onChange={setLoginPassword} placeholder="Test123#" />
+              <PasswordField label="Password" value={loginPassword} onChange={setLoginPassword} placeholder="Enter your local prototype password" />
               <button className="primary" type="button" onClick={() => void onLogin({ username: loginUsername, password: loginPassword })}>Log in</button>
               <div className="auth-row">
                 <button className="secondary" type="button">Log in with Google</button>
@@ -767,97 +892,136 @@ function ConnectScreen({ accountMessage, claims, contributions, countryOptions, 
               <button className="secondary create-account-button" type="button" onClick={() => setShowCreateAccount(true)}>Create a new account</button>
             </div>
           </> : <>
-            <h3>Logged in as {loggedInUser.username}</h3>
-            <div className="form-grid compact logged-in-profile-fields account-settings-grid">
-              <label className="account-settings-row">Username<input value={draftUsername} onChange={(event) => { setDraftUsername(event.target.value); setProfileUpdateMessage('Press Confirm update to save account changes.') }} placeholder="Username" /></label>
-              <div className="account-settings-row"><PasswordField label="New password" value={draftPassword} onChange={(value) => { setDraftPassword(value); setProfileUpdateMessage('Press Confirm update to save account changes.') }} placeholder="Leave blank to keep current password" /></div>
-              <div className="account-settings-row"><PasswordField label="Repeat new password" value={draftRepeatPassword} onChange={(value) => { setDraftRepeatPassword(value); setProfileUpdateMessage('Press Confirm update to save account changes.') }} placeholder="Repeat only if changing password" /></div>
-              {(draftPasswordIssues.length > 0 || (draftPassword && draftPassword !== draftRepeatPassword)) && <div className="password-rules compact-password-rules account-settings-row"><strong>Password update</strong>{draftPasswordIssues.length > 0 && <ul>{draftPasswordIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul>}{draftPassword && draftPassword !== draftRepeatPassword && <p>Passwords must match.</p>}</div>}
-              <label>Country<select value={draftCountry} onChange={(event) => { setDraftCountry(event.target.value); setProfileUpdateMessage('Press Confirm update to save profile changes.') }}><option value="">Select country</option>{countryOptions.map((country) => <option key={country}>{country}</option>)}</select></label>
-              <label>Age group<select value={draftAgeGroup} onChange={(event) => { setDraftAgeGroup(event.target.value); setProfileUpdateMessage('Press Confirm update to save profile changes.') }}><option value="">Select age group or AI agent</option>{ageBrackets.map((age) => <option key={age}>{age}</option>)}</select></label>
+            <h3>Profile summary</h3>
+            <div className="account-profile-summary" aria-label="Logged-in prototype profile summary">
+              <p className="account-summary-name">Logged in as <strong>{loggedInUser.username}</strong></p>
+              <dl className="profile-summary-list">
+                <div><dt>Country</dt><dd>{loggedInUser.country || 'Not selected'}</dd></div>
+                <div><dt>Age group</dt><dd>{loggedInUser.ageGroup || 'Not selected'}</dd></div>
+              </dl>
+              <p className="muted small-note">This is local prototype data only. It is not a real account, credential, identity check, or payment record.</p>
             </div>
-            <div className="guardian-picker">
-              <details className="info-disclosure"><summary><span>Connect to a parent / guardian account (optional)</span><span className="info-toggle small-info-toggle" aria-label="More information about parent or guardian accounts">i</span></summary><p className="muted info-panel">Children or dependents can search and confirm the parent or guardian account that will claim on their behalf. You can modify this at any time when you log in.</p></details>
-              <div className="form-grid compact connector-filter-grid">
-                <label>Filter by country<select value={guardianCountry} onChange={(event) => setGuardianCountry(event.target.value)}><option value="">Any country</option>{countryOptions.map((country) => <option key={country}>{country}</option>)}</select></label>
-                <label>Filter by age group<select value={guardianAgeGroup} onChange={(event) => setGuardianAgeGroup(event.target.value)}><option value="">Any age group</option>{ageBrackets.map((age) => <option key={age}>{age}</option>)}</select></label>
+            <div className="account-editor-toggles profile-editor-toggle-group">
+              <button className={`secondary full-width account-edit-toggle editor-toggle${accountEditorOpen ? ' open' : ''}`} type="button" aria-expanded={accountEditorOpen} aria-controls="account-profile-editor" onClick={() => setAccountEditorOpen((open) => !open)}>{accountEditorOpen ? 'Close update user profile' : 'Open update user profile'}</button>
+            </div>
+            {accountEditorOpen && <div className="form-stack account-profile-editor" id="account-profile-editor">
+              <div className="form-grid compact logged-in-profile-fields account-settings-grid">
+                <label className="account-settings-row">Username<input value={draftUsername} onChange={(event) => { setDraftUsername(event.target.value); setProfileUpdateMessage('Press Confirm update to save account changes.') }} placeholder="Username" /></label>
+                <div className="account-settings-row"><PasswordField label="New password" value={draftPassword} onChange={(value) => { setDraftPassword(value); setProfileUpdateMessage('Press Confirm update to save account changes.') }} placeholder="Leave blank to keep current prototype password" /></div>
+                <div className="account-settings-row"><PasswordField label="Repeat new password" value={draftRepeatPassword} onChange={(value) => { setDraftRepeatPassword(value); setProfileUpdateMessage('Press Confirm update to save account changes.') }} placeholder="Repeat only if changing password" /></div>
+                {(draftPasswordIssues.length > 0 || (draftPassword && draftPassword !== draftRepeatPassword)) && <div className="password-rules compact-password-rules account-settings-row"><strong>Password update</strong>{draftPasswordIssues.length > 0 && <ul>{draftPasswordIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul>}{draftPassword && draftPassword !== draftRepeatPassword && <p>Passwords must match.</p>}</div>}
+                <label>Country<select value={draftCountry} onChange={(event) => { setDraftCountry(event.target.value); setProfileUpdateMessage('Press Confirm update to save profile changes.') }}><option value="">Select country</option>{countryOptions.map((country) => <option key={country}>{country}</option>)}</select></label>
+                <label>Age group<select value={draftAgeGroup} onChange={(event) => { setDraftAgeGroup(event.target.value); setProfileUpdateMessage('Press Confirm update to save profile changes.') }}><option value="">Select age group or AI agent</option>{ageBrackets.map((age) => <option key={age}>{age}</option>)}</select></label>
               </div>
-              <label>Search parent / guardian by name<input value={guardianSearch} onChange={(event) => setGuardianSearch(event.target.value)} placeholder="Start typing guardian name" type="search" /></label>
-              {hasGuardianFilters && <div className="result-list compact-results">{guardianMatches.length > 0 ? guardianMatches.map((user) => <button key={user.id} type="button" onClick={() => selectGuardian(user)}>{user.username}<small>{user.country} · {user.ageGroup}</small></button>) : <p className="muted">No guardian accounts match those filters yet.</p>}</div>}
-              {draftGuardianUsername && <div className="callout green selected-connector"><span>Selected parent / guardian: <strong>{draftGuardianUsername}</strong></span><button className="secondary" type="button" onClick={clearGuardian}>Clear guardian</button></div>}
+              <p className="muted small-note">Leave the password fields blank to keep the current prototype password. These changes affect only this local simulated beta record.</p>
+              <div className="account-editor-actions">
+                <button className="secondary full-width confirm-update" disabled={!accountProfileDraftChanged} type="button" onClick={() => { void confirmProfileUpdate() }}>Confirm update</button>
+                <button className="secondary full-width" type="button" onClick={() => setAccountEditorOpen(false)}>Cancel profile update</button>
+              </div>
+            </div>}
+            <div className="guardian-connection-summary" aria-label="Parent and guardian connection summary">
+              {savedGuardianConnections.length === 0 && <p><strong>No parent / guardian identified.</strong></p>}
+              {savedGuardianConnections.map((connection) => <p key={connection.guardianUserId}>
+                {connection.guardianStatus === 'pending' && <><strong>Parent / guardian request pending:</strong> {connection.guardianUsername || 'Selected account'} has not accepted it yet.</>}
+                {connection.guardianStatus === 'accepted' && <><strong>Parent / guardian accepted:</strong> {connection.guardianUsername || 'Selected account'}.</>}
+                {connection.guardianStatus === 'declined' && <><strong>Parent / guardian request declined:</strong> choose a parent or guardian and submit a new request.</>}
+              </p>)}
+              {parentGuardianSelectionLocked && <p className="muted small-note"><strong>Parent / guardian selection is unavailable.</strong> This account already has an accepted child / ward connection, so it cannot identify a parent or guardian. This prevents circular or tiered fictional relationships.</p>}
+              {pendingGuardianRequests.length > 0 && <p><strong>{pendingGuardianRequests.length} child / ward request{pendingGuardianRequests.length === 1 ? '' : 's'} awaiting your response.</strong></p>}
+              {acceptedChildren.length > 0 ? <div className="accepted-children-summary"><strong>{acceptedChildren.length} child / ward connection{acceptedChildren.length === 1 ? '' : 's'} accepted</strong><ul>{acceptedChildren.map((child) => <li key={child.id}>{child.username}</li>)}</ul></div> : <p>No child / ward connections accepted.</p>}
+              <p className="muted small-note"><strong>Child / ward capacity:</strong> {activeChildWardCount} of {MAX_ACTIVE_CHILD_WARD_CONNECTIONS} active child / ward connections. Pending requests reserve capacity until they are accepted, declined, or removed.</p>
             </div>
-            <button className="secondary full-width confirm-update" disabled={!profileDraftChanged} type="button" onClick={() => { void confirmProfileUpdate() }}>Confirm update</button>
-            {profileUpdateMessage && <div className="callout green compact-callout">{profileUpdateMessage}</div>}
-            <div className="card-grid two login-metrics"><button className="metric-card metric-link" type="button" onClick={onNext}><span>Your contributions</span><strong>{formatMoney(personalContributionTotal)}</strong><small>{personalContributions.length} contribution{personalContributions.length === 1 ? '' : 's'} — go to Contribute</small></button><button className="metric-card metric-link" type="button" onClick={onClaim}><span>Total claimed</span><strong>{formatMoney(personalClaimTotal)}</strong><small>{personalClaims.length} claim{personalClaims.length === 1 ? '' : 's'} — go to Claim</small></button></div>
+            <div className="account-editor-toggles guardian-editor-toggle-group">
+              <button className={`secondary full-width guardian-editor-toggle editor-toggle${guardianEditorOpen ? ' open' : ''}`} type="button" aria-expanded={guardianEditorOpen} aria-controls="guardian-account-editor" onClick={toggleGuardianEditor}>{guardianEditorOpen ? 'Close update parent / guardian connection' : 'Open update parent / guardian connection'}</button>
+            </div>
+            {guardianEditorOpen && <div className="form-stack guardian-account-editor" id="guardian-account-editor">
+              <details className="info-disclosure"><summary><span>Update parent / guardian connection</span><span className="info-toggle small-info-toggle" aria-label="More information about parent or guardian connections">i</span></summary><p className="muted info-panel">You may identify up to two direct parent / guardian accounts. Each selection creates only a fictional local request and remains inactive until that person accepts it. This prototype does not create a real relationship, verify identity, or give grandparents or other tiers authority.</p></details>
+              <section className="guardian-child-update" aria-labelledby="guardian-child-update-heading">
+                <h4 id="guardian-child-update-heading">Your parent / guardian selection</h4>
+                <p className="muted small-note"><strong>Direct parent / guardian capacity:</strong> {draftGuardianConnections.length} of {MAX_DIRECT_GUARDIAN_CONNECTIONS}. Each selected account must accept separately.</p>
+                {parentGuardianSelectionLocked ? <div className="callout compact-callout"><strong>Parent / guardian selection is unavailable.</strong> You already have an accepted child / ward connection. Clear any existing own parent / guardian selection before accepting a child / ward relationship, and do not create tiers or circles.</div> : <>
+                  <div className="form-grid compact connector-filter-grid">
+                    <label>Filter by country<select value={guardianCountry} onChange={(event) => setGuardianCountry(event.target.value)}><option value="">Any country</option>{countryOptions.map((country) => <option key={country}>{country}</option>)}</select></label>
+                    <label>Filter by age group<select value={guardianAgeGroup} onChange={(event) => setGuardianAgeGroup(event.target.value)}><option value="">Any age group</option>{ageBrackets.map((age) => <option key={age}>{age}</option>)}</select></label>
+                  </div>
+                  <label>Search parent / guardian name<input value={guardianSearch} onChange={(event) => setGuardianSearch(event.target.value)} placeholder="Start typing a parent / guardian name" type="search" /></label>
+                  {hasGuardianFilters && <div className="result-list compact-results">{guardianMatches.length > 0 ? guardianMatches.map((user) => {
+                    const childWardCount = activeChildWardCountFor(user.id)
+                    const guardianAtCapacity = childWardCount >= MAX_ACTIVE_CHILD_WARD_CONNECTIONS
+                    return <button disabled={guardianAtCapacity} key={user.id} title={guardianAtCapacity ? 'This parent / guardian has reached the maximum child / ward capacity.' : undefined} type="button" onClick={() => selectGuardian(user)}>{user.username}<small>{user.country} · {user.ageGroup} · {childWardCount} of {MAX_ACTIVE_CHILD_WARD_CONNECTIONS} child / ward connections{guardianAtCapacity ? ' — capacity reached' : ''}</small></button>
+                  }) : <p className="muted">No parent / guardian accounts match those filters yet.</p>}</div>}
+                </>}
+                {draftGuardianConnections.map((connection) => {
+                  const savedConnection = savedGuardianConnections.find((saved) => saved.guardianUserId === connection.guardianUserId)
+                  const status = !savedConnection ? ' (ready to submit)' : connection.guardianStatus === 'accepted' ? ' (accepted)' : connection.guardianStatus === 'pending' ? ' (awaiting acceptance)' : ' (declined)'
+                  return <div key={connection.guardianUserId} className="callout green selected-connector"><span>Selected parent / guardian: <strong>{connection.guardianUsername || 'Selected account'}</strong>{status}</span><button className="secondary" type="button" onClick={() => clearGuardian(connection.guardianUserId)}>Clear selection</button></div>
+                })}
+                <p className="muted small-note">A selected parent or guardian must accept before this is an accepted connection. A declined request may be selected again and resubmitted. Clearing a pending request or accepted connection is only saved when you use its confirm action below.</p>
+                <div className="account-editor-actions guardian-editor-actions">
+                  {guardianDraftRequests.length > 0 && !guardianSelectionConfirmed && <button className="secondary full-width confirm-update" disabled={!guardianDraftChanged} type="button" onClick={confirmGuardianSelection}>Confirm parent / guardian selection</button>}
+                  {guardianDraftRequests.length > 0 && guardianSelectionConfirmed && <button className="secondary full-width confirm-update" type="button" onClick={() => { void confirmGuardianConnection() }}>Submit parent / guardian request</button>}
+                  {guardianRemovalIsPending && <button className="secondary full-width confirm-update" type="button" onClick={() => { void confirmGuardianConnection() }}>Confirm cancel parent / guardian request</button>}
+                  {guardianRemovalIsAccepted && <button className="secondary full-width confirm-update" type="button" onClick={() => { void confirmGuardianConnection() }}>Confirm remove parent / guardian connection</button>}
+                  {!guardianRemovalOnly && guardianDraftRequests.length === 0 && <button className="secondary full-width confirm-update" disabled={!guardianDraftChanged} type="button" onClick={() => { void confirmGuardianConnection() }}>Confirm parent / guardian update</button>}
+                  <button className="secondary full-width" type="button" onClick={discardGuardianConnectionDraft}>Cancel parent / guardian connection</button>
+                </div>
+              </section>
+              {pendingGuardianRequests.length > 0 && <section className="guardian-request-list" aria-labelledby="guardian-pending-heading">
+                <h4 id="guardian-pending-heading">Child / ward requests awaiting your response</h4>
+                <p className="muted small-note">Accept only if this fictional local-demo account is the person you intend to represent. Declining leaves no accepted connection.</p>
+                <div className="guardian-connection-rows">{pendingGuardianRequests.map((child) => {
+                  const draftChange = childWardDraftChangeFor(child.id)
+                  return <article key={child.id} className="guardian-connection-row"><div><strong>{child.username}</strong><small>{child.country || 'Country not selected'} · {child.ageGroup || 'Age group not selected'}</small>{draftChange && <small><strong>{draftChange.action === 'accepted' ? 'Acceptance staged.' : 'Decline staged.'}</strong> Confirm child / ward update to save it.</small>}</div><div className="guardian-row-actions">{draftChange ? <button className="secondary" type="button" onClick={() => clearChildWardDraftUpdate(child.id)}>Clear staged child / ward update</button> : <><button className="secondary" type="button" onClick={() => stageChildWardUpdate(child.id, 'accepted')}>Accept child / ward connection</button><button className="secondary" type="button" onClick={() => stageChildWardUpdate(child.id, 'declined')}>Decline child / ward connection</button></>}</div></article>
+                })}</div>
+              </section>}
+              {acceptedChildren.length > 0 && <section className="guardian-accepted-list" aria-labelledby="guardian-accepted-heading">
+                <h4 id="guardian-accepted-heading">Accepted child / ward connections</h4>
+                <div className="guardian-connection-rows">{acceptedChildren.map((child) => {
+                  const draftChange = childWardDraftChangeFor(child.id)
+                  return <article key={child.id} className="guardian-connection-row"><div><strong>{child.username}</strong><small>{child.country || 'Country not selected'} · {child.ageGroup || 'Age group not selected'}</small>{draftChange && <small><strong>Removal staged.</strong> Confirm child / ward update to save it.</small>}</div><div className="guardian-row-actions">{draftChange ? <button className="secondary" type="button" onClick={() => clearChildWardDraftUpdate(child.id)}>Clear staged child / ward update</button> : <button className="secondary" type="button" onClick={() => stageChildWardUpdate(child.id, 'remove')}>Remove child / ward connection</button>}</div></article>
+                })}</div>
+              </section>}
+              {childWardDraftChanges.length > 0 && <div className="account-editor-actions guardian-editor-actions guardian-child-update-actions">
+                <button className="secondary full-width confirm-update" type="button" onClick={() => { void confirmChildWardUpdates() }}>Confirm child / ward update</button>
+                <button className="secondary full-width" type="button" onClick={discardChildWardDraftUpdates}>Cancel child / ward update</button>
+              </div>}
+            </div>}
+            {profileUpdateMessage && <div className="callout green compact-callout" role="status">{profileUpdateMessage}</div>}
+            <div className="card-grid two login-metrics"><button className="metric-card metric-link" type="button" onClick={onNext}><span>Your own contributions</span><strong>{formatMoney(personalContributionTotal)}</strong><small>{personalContributions.length} contribution{personalContributions.length === 1 ? '' : 's'} for yourself — go to Contribute</small></button><button className="metric-card metric-link" type="button" onClick={onClaim}><span>Total claimed</span><strong>{formatMoney(personalClaimTotal)}</strong><small>{personalClaims.length} claim{personalClaims.length === 1 ? '' : 's'} — go to Claim</small></button></div>
             <button className="primary full-width logout-button" type="button" onClick={handleLogout}>Log out</button>
           </>}
           {accountMessage && !loggedInUser && <div className="callout green">{accountMessage}</div>}
         </div>
         <div className="soft-card">
           <h3>Recognize your connector</h3>
-          <p>If someone helped you connect with Equity for Humanity, search and select their connector username so their service can be recognized. If you found Equity for Humanity yourself, please press the button below and Confirm update. Your benefit is always yours.</p>
-          <button className={`secondary full-width self-directed-button${selfDirectedSelected ? ' selected' : ''}`} type="button" onClick={selectSelfDirectedConnection}>I found Equity for Humanity myself</button>
-          <div className="form-grid compact connector-filter-grid">
-            <label>Filter by country<select value={connectorCountry} onChange={(event) => setConnectorCountry(event.target.value)}><option value="">Any country</option>{countryOptions.map((country) => <option key={country}>{country}</option>)}</select></label>
-            <label>Filter by age group<select value={connectorAgeGroup} onChange={(event) => setConnectorAgeGroup(event.target.value)}><option value="">Any age group</option>{ageBrackets.map((age) => <option key={age}>{age}</option>)}</select></label>
-          </div>
-          <label>Connector username<input value={connectorSearch} onChange={(event) => setConnectorSearch(event.target.value)} placeholder="Start typing a name" type="search" /></label>
-          {hasConnectorFilters && <div className="result-list">{connectorMatches.length > 0 ? connectorMatches.map((user) => <button key={user.id} type="button" onClick={() => selectConnector(user)}>{user.username}<small>{user.country} · {user.ageGroup}</small></button>) : <p className="muted">No connectors match those filters yet.</p>}</div>}
-          {loggedInUser && <button className="secondary full-width confirm-update" disabled={!profileDraftChanged} type="button" onClick={() => { void confirmProfileUpdate() }}>Confirm update</button>}
-          {profileUpdateMessage && loggedInUser && <div className="callout green compact-callout">{profileUpdateMessage}</div>}
-          {draftConnector && <div className="callout green selected-connector"><span>Selected connector: <strong>{draftConnector}</strong></span><button className="secondary" type="button" onClick={clearConnector}>Clear connector</button></div>}
-        </div>
-      </div>
-
-      <div className="soft-card profile-builder">
-        <h3>Contribute on behalf of or in honour of a person or group</h3>
-        <p className="muted">Search existing contribution profiles first. If the person, faith group, organization, memorial, honour profile, family, or community group is not there, create a short public contribution profile so others can identify it correctly.</p>
-        <div className="mode-row contribution-profile-mode">
-          <button className={`secondary contribution-mode-button${profileMode === 'search' ? ' selected' : ''}`} type="button" onClick={() => handleProfileModeChange('search')}>Search contribution profiles</button>
-          <button className={`secondary contribution-mode-button${profileMode === 'create' ? ' selected' : ''}`} type="button" onClick={() => handleProfileModeChange('create')}>Create contribution profile</button>
-          <button className={`secondary contribution-mode-button${profileMode === 'modify' ? ' selected' : ''}`} type="button" onClick={() => handleProfileModeChange('modify')}>Modify contribution profile</button>
-        </div>
-
-        {profileMode === 'search' && <div className="form-stack">
-          <div className="form-grid profile-filter-grid">
-            <label>Filter by contribution profile type<select value={profileTypeFilter} onChange={(event) => { setProfileTypeFilter(event.target.value); setDraftRecognitionProfile(null); setRecognitionMessage('') }}><option value="">All contribution profiles</option>{contributionProfileTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
-            <label>Filter by country<select value={profileCountryFilter} onChange={(event) => { setProfileCountryFilter(event.target.value); setDraftRecognitionProfile(null); setRecognitionMessage('') }}><option value="">Any country</option>{countryOptions.map((country) => <option key={country}>{country}</option>)}</select></label>
-            <label className="profile-search-field">Search by name or description<input value={profileSearch} onChange={(event) => { setProfileSearch(event.target.value); setDraftRecognitionProfile(null); setRecognitionMessage('') }} type="search" /></label>
-          </div>
-          {!hasProfileFilters && <p className="muted empty-results-note">Choose a contribution profile type, country, or start searching to find a contribution profile.</p>}
-          {hasProfileFilters && <div className="profile-results">{profileMatches.length > 0 ? profileMatches.map((profile) => <button key={profile.id} type="button" onClick={() => stageRecognitionProfile(profile)}><strong>{profile.name}</strong><span>{profile.type} · {profile.country}</span><small>{profile.description}</small></button>) : <p className="muted">No contribution profiles match those filters yet.</p>}</div>}
-          {draftRecognitionProfile && <div className={`callout green selected-recognition ${recognitionAction}`}><span>Selected contribution profile: <strong>{draftRecognitionProfile.name}</strong><small>{draftRecognitionProfile.type} · {draftRecognitionProfile.country}</small>{!canManageDraftRecognitionProfile && <small>Locked for editing unless you created this profile.</small>}</span><div className="selected-recognition-actions"><button className={`secondary ${recognitionAction === 'confirmed' ? 'action-clicked' : ''}`} type="button" onClick={confirmRecognitionProfile}>Confirm this contribution profile</button><button className={`secondary ${recognitionAction === 'cleared' ? 'action-clicked' : ''}`} type="button" onClick={clearRecognitionSelection}>Clear this contribution profile</button></div></div>}
-          {recognitionMessage && <div className={`callout green compact-callout ${recognitionAction}`}>{recognitionMessage}</div>}
-        </div>}
-
-        {profileMode === 'create' && <div className="form-stack">
-          <div className="form-grid create-profile-grid">
-            <label>Contribution profile type<select id="contribution-profile-type" value={form.type} onChange={(event) => { update('type', event.target.value); setProfileCreateErrors((current) => ({ ...current, type: undefined })) }} aria-invalid={Boolean(profileCreateErrors.type)}><option value="">Select contribution profile type</option>{contributionProfileTypes.map((type) => <option key={type}>{type}</option>)}</select>{profileCreateErrors.type && <small className="field-error">{profileCreateErrors.type}</small>}</label>
-            <label>Country<select id="contribution-profile-country" value={form.country} onChange={(event) => { update('country', event.target.value); setProfileCreateErrors((current) => ({ ...current, country: undefined })) }} aria-invalid={Boolean(profileCreateErrors.country)}><option value="">Select country</option>{countryOptions.map((country) => <option key={country}>{country}</option>)}</select>{profileCreateErrors.country && <small className="field-error">{profileCreateErrors.country}</small>}</label>
-            <label className="profile-name-field">Name a person or group<input id="contribution-profile-name" value={form.name} onChange={(event) => { update('name', event.target.value); setProfileCreateErrors((current) => ({ ...current, name: undefined })) }} placeholder="Name of person, group, or organization" type="text" aria-invalid={Boolean(profileCreateErrors.name)} />{profileCreateErrors.name && <small className="field-error">{profileCreateErrors.name}</small>}</label>
-          </div>
-          <label>Short public description<textarea value={form.description} onChange={(event) => update('description', event.target.value)} placeholder="A short description so supporters can identify this contribution profile without collecting sensitive personal details." /></label>
-          <button className="secondary" type="button" onClick={() => { void saveCreatedProfile() }}>Save profile to prototype file</button>
-          {message && <div className="callout green">{message}</div>}
-        </div>}
-
-        {profileMode === 'modify' && <div className="form-stack">
-          {!loggedInUser && <p className="muted empty-results-note">Log in to modify contribution profiles you created.</p>}
-          {loggedInUser && ownedContributionProfiles.length === 0 && <p className="muted empty-results-note">No contribution profiles created by this account yet.</p>}
-          {loggedInUser && ownedContributionProfiles.length > 0 && <div className="profile-results">{ownedContributionProfiles.map((profile) => <button key={profile.id} type="button" onClick={() => selectProfileToModify(profile)}><strong>{profile.name}</strong><span>{profile.type} · {profile.country}</span><small>{profile.description || 'No public description yet.'}</small></button>)}</div>}
-          {profileBeingModified && <>
-            <div className="form-grid create-profile-grid">
-              <label>Contribution profile type<select id="contribution-profile-type" value={form.type} onChange={(event) => { update('type', event.target.value); setProfileCreateErrors((current) => ({ ...current, type: undefined })) }} aria-invalid={Boolean(profileCreateErrors.type)}><option value="">Select contribution profile type</option>{contributionProfileTypes.map((type) => <option key={type}>{type}</option>)}</select>{profileCreateErrors.type && <small className="field-error">{profileCreateErrors.type}</small>}</label>
-              <label>Country<select id="contribution-profile-country" value={form.country} onChange={(event) => { update('country', event.target.value); setProfileCreateErrors((current) => ({ ...current, country: undefined })) }} aria-invalid={Boolean(profileCreateErrors.country)}><option value="">Select country</option>{countryOptions.map((country) => <option key={country}>{country}</option>)}</select>{profileCreateErrors.country && <small className="field-error">{profileCreateErrors.country}</small>}</label>
-              <label className="profile-name-field">Name a person or group<input id="contribution-profile-name" value={form.name} onChange={(event) => { update('name', event.target.value); setProfileCreateErrors((current) => ({ ...current, name: undefined })) }} placeholder="Name of person, group, or organization" type="text" aria-invalid={Boolean(profileCreateErrors.name)} />{profileCreateErrors.name && <small className="field-error">{profileCreateErrors.name}</small>}</label>
+          <p>If someone helped you connect with Equity for Humanity, you may recognize their username. If you found Equity for Humanity yourself, you may record that instead. Your benefit is always yours.</p>
+          {!loggedInUser ? <div className="callout compact-callout">Log in to view or update this account’s connector status.</div> : <>
+            <div className="connector-status" aria-label="Current connector status">
+              {savedConnector ? <p><strong>Current connector:</strong> {savedConnector}.</p> : savedConnectorSelfDirected ? <p><strong>You found Equity for Humanity yourself.</strong></p> : <p><strong>No connector identified.</strong></p>}
             </div>
-            <label>Short public description<textarea value={form.description} onChange={(event) => update('description', event.target.value)} placeholder="A short description so supporters can identify this contribution profile without collecting sensitive personal details." /></label>
-            <button className="secondary" type="button" onClick={() => { void saveModifiedProfile() }}>Save modified contribution profile</button>
+            <div className="connector-choice-actions">
+              <button className={`secondary full-width self-directed-button${draftConnectorSelfDirected ? ' selected' : ''}`} type="button" onClick={selectSelfDirectedConnection}>I found Equity for Humanity myself</button>
+              <button className={`secondary full-width connector-editor-toggle${connectorEditorOpen ? ' open' : ''}`} type="button" aria-expanded={connectorEditorOpen} onClick={toggleConnectorEditor}>Someone helped me connect to Equity for Humanity</button>
+            </div>
+            {connectorEditorOpen && <div className="form-stack connector-editor">
+              <div className="form-grid compact connector-filter-grid">
+                <label>Filter by country<select value={connectorCountry} onChange={(event) => setConnectorCountry(event.target.value)}><option value="">Any country</option>{countryOptions.map((country) => <option key={country}>{country}</option>)}</select></label>
+                <label>Filter by age group<select value={connectorAgeGroup} onChange={(event) => setConnectorAgeGroup(event.target.value)}><option value="">Any age group</option>{ageBrackets.map((age) => <option key={age}>{age}</option>)}</select></label>
+              </div>
+              <label>Connector username<input value={connectorSearch} onChange={(event) => setConnectorSearch(event.target.value)} placeholder="Start typing a name" type="search" /></label>
+              {hasConnectorFilters && <div className="result-list">{connectorMatches.length > 0 ? connectorMatches.map((user) => <button key={user.id} type="button" onClick={() => selectConnector(user)}>{user.username}<small>{user.country} · {user.ageGroup}</small></button>) : <p className="muted">No connectors match those filters yet.</p>}</div>}
+            </div>}
+            {draftConnector && <div className="callout green selected-connector"><span>Selected connector: <strong>{draftConnector}</strong> (ready to confirm)</span><button className="secondary" type="button" onClick={clearConnector}>Clear connector</button></div>}
+            {draftConnectorSelfDirected && <div className="callout green selected-connector"><span>You found Equity for Humanity yourself. Confirm connector update to save this selection.</span><button className="secondary" type="button" onClick={clearConnector}>Clear self-directed status</button></div>}
+            <div className="account-editor-actions connector-editor-actions">
+              <button className="secondary full-width confirm-update" disabled={!connectorDraftChanged} type="button" onClick={() => { void confirmConnectorUpdate() }}>Confirm connector update</button>
+              <button className="secondary full-width" type="button" onClick={discardConnectorDraft}>Cancel connector update</button>
+            </div>
+            {connectorUpdateMessage && <div className="callout green compact-callout" role="status">{connectorUpdateMessage}</div>}
           </>}
-          {recognitionMessage && <div className="callout green compact-callout">{recognitionMessage}</div>}
-          {message && <div className="callout green">{message}</div>}
-        </div>}
+        </div>
       </div>
+
       <NextStep onClick={onNext}>Proceed to Contribute</NextStep>
 
       {showCreateAccount && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Create account">
@@ -872,22 +1036,28 @@ function ConnectScreen({ accountMessage, claims, contributions, countryOptions, 
           </div>
           <div className="form-grid">
             <label>Username<input value={newUsername} onChange={(event) => setNewUsername(event.target.value)} placeholder="Choose a username" type="text" /></label>
-            <PasswordField label="Password" value={newPassword} onChange={setNewPassword} placeholder="Optional — defaults to Test123#" />
-            <PasswordField label="Repeat password" value={repeatPassword} onChange={setRepeatPassword} placeholder="Repeat only if you typed a password" />
-            <div className="password-rules"><strong>Prototype password</strong><span>You can leave password blank. New accounts default to Test123#. If you type a custom password, use at least 8 characters, one capital letter, one number, and one special character.</span>{passwordIssues.length > 0 && <ul>{passwordIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul>}{newPassword && newPassword !== repeatPassword && <p>Passwords must match.</p>}</div>
-            {PRIVATE_BETA && <label>Private beta access code<input value={betaAccessCode} onChange={(event) => setBetaAccessCode(event.target.value)} placeholder="Enter the code shared with trusted testers" type="password" /></label>}
+            <PasswordField label="Password" value={newPassword} onChange={setNewPassword} placeholder="At least 8 characters" />
+            <PasswordField label="Repeat password" value={repeatPassword} onChange={setRepeatPassword} placeholder="Repeat your password" />
+            <div className="password-rules"><strong>Local prototype password</strong><span>Choose a password with at least 8 characters, one capital letter, one number, and one special character. It is only for this local simulated account.</span>{passwordIssues.length > 0 && <ul>{passwordIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul>}{newPassword && newPassword !== repeatPassword && <p>Passwords must match.</p>}</div>
+
             <label>Age group<select value={newAgeGroup} onChange={(event) => setNewAgeGroup(event.target.value)}><option value="">Select age group or AI agent</option>{ageBrackets.map((age) => <option key={age}>{age}</option>)}</select></label>
             <label>Country<select value={newCountry} onChange={(event) => setNewCountry(event.target.value)}><option value="">Select country</option>{countryOptions.map((country) => <option key={country}>{country}</option>)}</select></label>
+            {PRIVATE_BETA && <label>Private beta access code<input value={betaAccessCode} onChange={(event) => setBetaAccessCode(event.target.value)} placeholder="Enter the code shared with trusted testers" type="password" /></label>}
             <div className="guardian-picker modal-guardian-picker">
-              <h4>For children or dependents, please link your account to a parent or guardian account.</h4>
-              <p className="muted">Search by name, country, and age group, then confirm the right parent or guardian account. This is so the parent or guardian can claim on behalf of their children or dependents, since children and dependents are unable to claim for themselves.</p>
+              <h4>For children or dependents, you may identify up to two parent or guardian accounts.</h4>
+              <p className="muted">Search by name, country, and age group. Creating the account sends fictional local requests; each selected person must accept separately before any parent / guardian connection is accepted. It does not verify identity or create a real relationship.</p>
               <div className="form-grid compact connector-filter-grid">
                 <label>Filter by country<select value={guardianCountry} onChange={(event) => setGuardianCountry(event.target.value)}><option value="">Any country</option>{countryOptions.map((country) => <option key={country}>{country}</option>)}</select></label>
                 <label>Filter by age group<select value={guardianAgeGroup} onChange={(event) => setGuardianAgeGroup(event.target.value)}><option value="">Any age group</option>{ageBrackets.map((age) => <option key={age}>{age}</option>)}</select></label>
               </div>
-              <label>Search guardian name<input value={guardianSearch} onChange={(event) => setGuardianSearch(event.target.value)} placeholder="Start typing guardian name" type="search" /></label>
-              {hasGuardianFilters && <div className="result-list compact-results">{guardianMatches.length > 0 ? guardianMatches.map((user) => <button key={user.id} type="button" onClick={() => selectGuardian(user)}>{user.username}<small>{user.country} · {user.ageGroup}</small></button>) : <p className="muted">No guardian accounts match those filters yet.</p>}</div>}
-              {newGuardianUsername && <div className="callout green selected-connector"><span>Confirmed parent / guardian: <strong>{newGuardianUsername}</strong></span><button className="secondary" type="button" onClick={clearGuardian}>Clear guardian</button></div>}
+              <label>Search parent / guardian name<input value={guardianSearch} onChange={(event) => setGuardianSearch(event.target.value)} placeholder="Start typing a parent / guardian name" type="search" /></label>
+              {hasGuardianFilters && <div className="result-list compact-results">{guardianMatches.length > 0 ? guardianMatches.map((user) => {
+                const childWardCount = activeChildWardCountFor(user.id)
+                const guardianAtCapacity = childWardCount >= MAX_ACTIVE_CHILD_WARD_CONNECTIONS
+                return <button disabled={guardianAtCapacity} key={user.id} title={guardianAtCapacity ? 'This parent / guardian has reached the maximum child / ward capacity.' : undefined} type="button" onClick={() => selectGuardian(user)}>{user.username}<small>{user.country} · {user.ageGroup} · {childWardCount} of {MAX_ACTIVE_CHILD_WARD_CONNECTIONS} child / ward connections{guardianAtCapacity ? ' — capacity reached' : ''}</small></button>
+              }) : <p className="muted">No parent / guardian accounts match those filters yet.</p>}</div>}
+              <p className="muted small-note"><strong>Direct parent / guardian capacity:</strong> {newGuardianConnections.length} of {MAX_DIRECT_GUARDIAN_CONNECTIONS}.</p>
+              {newGuardianConnections.map((connection) => <div key={connection.guardianUserId} className="callout green selected-connector"><span>Selected parent / guardian: <strong>{connection.guardianUsername}</strong> (pending their acceptance)</span><button className="secondary" type="button" onClick={() => clearGuardian(connection.guardianUserId)}>Clear selection</button></div>)}
             </div>
           </div>
           {localError && <div className="callout">{localError}</div>}
@@ -898,7 +1068,7 @@ function ConnectScreen({ accountMessage, claims, contributions, countryOptions, 
   )
 }
 
-function ContributeScreen({ amount, setAmount, assetType, setAssetType, mode, setMode, onBack, onNext, onSave, message, activeProfile, recognitionName, setRecognitionName, paymentMethod, setPaymentMethod, loggedInUser, contributions, ledgerFocus, users }: { amount: string; setAmount: (value: string) => void; assetType: ContributionAssetType; setAssetType: (value: ContributionAssetType) => void; mode: AllocationMode; setMode: (value: AllocationMode) => void; onBack: () => void; onNext: () => void; onSave: (contributionValue?: number, contributionPaymentMethod?: string, targetUsers?: User[], isAnonymous?: boolean) => Promise<boolean>; message: string; activeProfile: Profile | null; recognitionName: string; setRecognitionName: (value: string) => void; paymentMethod: string; setPaymentMethod: (value: string) => void; loggedInUser: User | null; contributions: Contribution[]; ledgerFocus: ContributionLedgerFocus | null; users: User[] }) {
+function ContributeScreen({ amount, setAmount, assetType, setAssetType, mode, setMode, onBack, onNext, onSave, message, activeProfile, countryOptions, form, onChangeProfileForm, onClearRecognitionProfile, onSaveProfile, onSelectRecognitionProfile, onUpdateContributionProfile, paymentMethod, setPaymentMethod, profileMessage, profiles, loggedInUser, contributions, users }: { amount: string; setAmount: (value: string) => void; assetType: ContributionAssetType; setAssetType: (value: ContributionAssetType) => void; mode: AllocationMode; setMode: (value: AllocationMode) => void; onBack: () => void; onNext: () => void; onSave: (contributionValue?: number, contributionPaymentMethod?: string, targetUsers?: User[], isAnonymous?: boolean, recognitionProfile?: Profile | null) => Promise<boolean>; message: string; activeProfile: Profile | null; countryOptions: string[]; form: ContributionProfileForm; onChangeProfileForm: (value: ContributionProfileForm) => void; onClearRecognitionProfile: () => void; onSaveProfile: () => Promise<Profile | null>; onSelectRecognitionProfile: (profile: Profile) => void; onUpdateContributionProfile: (profileId: string, input: { name: string; type: string; country: string; description: string }) => Promise<Profile | null>; paymentMethod: string; setPaymentMethod: (value: string) => void; profileMessage: string; profiles: Profile[]; loggedInUser: User | null; contributions: Contribution[]; users: User[] }) {
   const [showPaymentDetails, setShowPaymentDetails] = useState(false)
   const [stockTicker, setStockTicker] = useState('AAPL')
   const [cryptoSymbol, setCryptoSymbol] = useState('')
@@ -910,6 +1080,7 @@ function ContributeScreen({ amount, setAmount, assetType, setAssetType, mode, se
   const [contributionFor, setContributionFor] = useState('self')
   const [contributionError, setContributionError] = useState('')
   const [anonymousContribution, setAnonymousContribution] = useState(false)
+  const [showContributionProfileModal, setShowContributionProfileModal] = useState(false)
   const amountNumber = Number(amount) || 0
   const formAssetType = loggedInUser ? assetType : 'Dollars'
   const formPaymentMethod = loggedInUser ? paymentMethod : ''
@@ -920,24 +1091,39 @@ function ContributeScreen({ amount, setAmount, assetType, setAssetType, mode, se
   const contributionValue = formAssetType === 'Stock' ? amountNumber * stockPrice : formAssetType === 'Crypto asset' ? amountNumber * cryptoPrice : amountNumber
   const amountLabel = formAssetType === 'Stock' ? 'Number of shares' : formAssetType === 'Crypto asset' ? 'Number of coins' : 'Contribution amount'
   const amountPlaceholder = formAssetType === 'Stock' ? 'Enter number of shares' : formAssetType === 'Crypto asset' ? 'Enter number of coins' : 'Enter amount'
-  const linkedDependents = loggedInUser ? users.filter((user) => user.id !== loggedInUser.id && (user.guardianUsername === loggedInUser.username || (!user.guardianUsername && user.connector === loggedInUser.username && isChildAgeGroup(user.ageGroup)))) : []
+  const linkedDependents = loggedInUser ? users.filter((user) => user.id !== loggedInUser.id && hasGuardianConnection(user, loggedInUser.id, 'accepted')) : []
   const selectedContributionDependent = contributionFor.startsWith('dependent:') ? linkedDependents.find((user) => user.id === contributionFor.replace('dependent:', '')) : null
   const contributionTargets = contributionFor === 'self' && loggedInUser ? [loggedInUser] : contributionFor === 'all-dependents' ? linkedDependents : selectedContributionDependent ? [selectedContributionDependent] : loggedInUser ? [loggedInUser] : []
-  const personalContributions = loggedInUser ? contributions.filter((entry) => entry.contributorUserId === loggedInUser.id || entry.profileId === loggedInUser.profileId || entry.recognitionName === loggedInUser.username) : []
-  const selectedContributionFocus = contributionFor !== 'self' && contributionTargets.length > 0 ? { label: contributionTargets.length === 1 ? contributionTargets[0].username : 'Selected dependents', userIds: contributionTargets.map((target) => target.id), profileIds: contributionTargets.map((target) => target.profileId).filter(Boolean) as string[], isGuardianView: true } : null
-  const activeLedgerFocus = ledgerFocus ?? selectedContributionFocus
-  const focusedContributions = activeLedgerFocus ? contributions.filter((entry) => activeLedgerFocus.userIds.includes(entry.contributorUserId ?? '') || activeLedgerFocus.profileIds.includes(entry.profileId ?? '')) : []
-  const ledgerContributions = activeLedgerFocus ? focusedContributions : personalContributions
-  const ledgerTitle = activeLedgerFocus ? activeLedgerFocus.label === 'Selected dependents' ? 'Selected dependents’ simulated contribution ledger' : `${activeLedgerFocus.label}'s simulated contribution ledger` : 'Your simulated contribution ledger'
-  const ledgerNote = activeLedgerFocus?.isGuardianView ? `Showing the contribution ledger for ${activeLedgerFocus.label} because this contribution or recycled benefit is allocated to that child or dependent account.` : ''
-  const totalHumanity = personalContributions.reduce((total, entry) => total + entry.humanityFund, 0)
-  const totalStewardship = personalContributions.reduce((total, entry) => total + entry.stewardshipReserve, 0)
+  const dependentContributionAmounts = contributionFor === 'all-dependents' ? splitContributionEqually(contributionValue, contributionTargets.length) : []
+  const contributionAccounting = loggedInUser ? calculateContributionAccounting(contributions, loggedInUser.id, loggedInUser.profileId ?? '') : null
+  const personalContributions = contributionAccounting?.selfContributions ?? []
+  const ledgerContributions = contributionAccounting?.recordedByUser ?? []
+  const ledgerTitle = 'Your simulated contribution ledger'
+  const ledgerNote = 'This ledger always shows the contributions or recycled benefits you recorded. Amounts credited to another person or group are labelled “on behalf of …” and do not count toward your own fund total; your circle is based on total credit to your profile.'
+  const totalHumanity = contributionAccounting?.selfHumanityFundTotal ?? 0
+  const totalStewardship = contributionAccounting?.selfStewardshipFundTotal ?? 0
   const recycledClaims = personalContributions.filter((entry) => entry.sourceClaimId).reduce((total, entry) => total + entry.amount, 0)
-  const personalTotalContributions = totalHumanity + totalStewardship
-  const currentLevel = contributionCircleLevels.reduce((current, level) => personalTotalContributions >= level.threshold ? level : current, contributionCircleLevels[0])
+  const personalTotalContributions = contributionAccounting?.selfContributionTotal ?? 0
+  const onBehalfContributionTotal = contributionAccounting?.onBehalfContributionTotal ?? 0
+  const onBehalfRecognitionTotal = contributionAccounting?.onBehalfRecognitionTotal ?? onBehalfContributionTotal
+  const recordedContributionTotal = contributionAccounting?.recordedContributionTotal ?? 0
+  const receivedContributionTotal = contributionAccounting?.receivedContributionTotal ?? 0
+  const creditedToProfileTotal = contributionAccounting?.creditedToProfileTotal ?? 0
+  const onBehalfContributionGroups = [...(contributionAccounting?.onBehalfContributions ?? []).reduce((totals, entry) => {
+    const key = entry.profileId ?? entry.recognitionName
+    const existing = totals.get(key) ?? { key, label: profiles.find((profile) => profile.id === entry.profileId)?.name ?? entry.recognitionName, amount: 0, humanityFund: 0, stewardshipReserve: 0 }
+    existing.amount += entry.amount
+    existing.humanityFund += entry.humanityFund
+    existing.stewardshipReserve += entry.stewardshipReserve
+    totals.set(key, existing)
+    return totals
+  }, new Map<string, { key: string; label: string; amount: number; humanityFund: number; stewardshipReserve: number }>()).values()].sort((a, b) => b.amount - a.amount || a.label.localeCompare(b.label))
+  const selectedRecognitionHumanityFundTotal = activeProfile ? contributions.filter((entry) => entry.profileId === activeProfile.id).reduce((total, entry) => total + entry.humanityFund, 0) : 0
+  const selectedRecognitionStewardshipFundTotal = activeProfile ? contributions.filter((entry) => entry.profileId === activeProfile.id).reduce((total, entry) => total + entry.stewardshipReserve, 0) : 0
+  const currentLevel = contributionCircleLevels.reduce((current, level) => creditedToProfileTotal >= level.threshold ? level : current, contributionCircleLevels[0])
   const currentIndex = contributionCircleLevels.findIndex((level) => level.name === currentLevel.name)
   const nextLevel = contributionCircleLevels[currentIndex + 1] ?? currentLevel
-  const nextTierGap = Math.max(0, nextLevel.threshold - personalTotalContributions)
+  const nextTierGap = Math.max(0, nextLevel.threshold - creditedToProfileTotal)
   const visibleCircle = contributionCircleLevels.find((level) => level.name === (contributionAnimationLevel || selectedCircle || currentLevel.name)) ?? currentLevel
   const visibleIndex = contributionCircleLevels.findIndex((level) => level.name === visibleCircle.name)
   const fireworkCount = contributionAnimationLevel ? visibleIndex + 1 : 0
@@ -960,26 +1146,38 @@ function ContributeScreen({ amount, setAmount, assetType, setAssetType, mode, se
     if (assetType === 'Crypto asset') return cryptoSymbol ? `${amountNumber.toLocaleString()} ${cryptoLabel} at ${formatMoney(cryptoPrice)} each = ${formatMoney(contributionValue)}` : `${amountNumber.toLocaleString()} coins — select cryptocurrency for the dollar equivalent`
     return formatMoney(amountNumber)
   }
+  const paymentDetailsAreDisabled = true
   const paymentIntro = paymentMethod === 'Crypto wallet'
-    ? 'Connect a wallet or paste a wallet address. This prototype does not move crypto.'
+    ? 'These illustrative wallet fields are intentionally locked. This prototype does not move crypto.'
     : paymentMethod === 'Stock transfer'
-      ? 'Enter transfer details for a future brokerage or transfer-agent flow. This prototype does not move shares.'
-      : paymentMethod === 'Bill payment'
-        ? 'Use these draft bill-payment details for a future bank payment flow.'
-        : paymentMethod === 'PayPal'
-          ? 'Use the draft PayPal details below. This prototype does not connect to PayPal.'
-          : 'Enter draft card details for the prototype contribution flow. No real payment is processed.'
+      ? 'These illustrative transfer fields are intentionally locked. This prototype does not move shares.'
+    : paymentMethod === 'Bill payment'
+        ? 'These illustrative bill-payment fields are intentionally locked for the future bank-payment flow.'
+      : paymentMethod === 'PayPal'
+          ? 'These illustrative PayPal fields are intentionally locked. This prototype does not connect to PayPal.'
+          : 'These illustrative card fields are intentionally locked. No real payment is processed.'
+  const selectContributionDestination = (destination: string) => {
+    setContributionFor(destination)
+    setContributionError('')
+    if (destination === 'other-person-or-group') setShowContributionProfileModal(true)
+  }
   const confirmContribution = async () => {
     if (!paymentMethod) {
       setContributionError('Please choose a payment method before continuing.')
       setShowPaymentDetails(false)
       return
     }
+    if (contributionFor === 'other-person-or-group' && !activeProfile) {
+      setContributionError('Choose the person or group to recognize before continuing.')
+      setShowContributionProfileModal(true)
+      return
+    }
     setContributionError('')
     const detail = assetType === 'Stock' ? ` · ${amountNumber.toLocaleString()} ${normalizedTicker} shares at ${formatMoney(stockPrice)} per share` : assetType === 'Crypto asset' && cryptoSymbol ? ` · ${amountNumber.toLocaleString()} ${cryptoLabel} at ${formatMoney(cryptoPrice)} each` : ''
-    const saved = await onSave(contributionValue, `${paymentMethod || 'Payment method not selected'}${detail}`, contributionTargets, anonymousContribution)
+    const recognitionProfile = contributionFor === 'other-person-or-group' ? activeProfile : null
+    const saved = await onSave(contributionValue, `${paymentMethod || 'Payment method not selected'}${detail}`, contributionTargets, anonymousContribution, recognitionProfile)
     if (saved) {
-      const projectedTotal = personalTotalContributions + contributionValue
+      const projectedTotal = creditedToProfileTotal + (contributionFor === 'self' ? contributionValue : 0)
       const projectedIndex = contributionCircleLevels.reduce((target, level, index) => projectedTotal >= level.threshold ? index : target, 0)
       setSelectedCircle('')
       setAnimationTargetIndex(projectedIndex)
@@ -998,7 +1196,10 @@ function ContributeScreen({ amount, setAmount, assetType, setAssetType, mode, se
         <div className="soft-card">
           <h3>Contribution details</h3>
           <div className="form-stack">
-          {loggedInUser && <label>Who is this contribution for?<select value={contributionFor} onChange={(event) => setContributionFor(event.target.value)}><option value="self">My own contribution</option><option disabled={linkedDependents.length === 0} value="all-dependents">All my dependents</option>{linkedDependents.map((dependent) => <option key={dependent.id} value={`dependent:${dependent.id}`}>{dependent.username}</option>)}</select></label>}
+          {loggedInUser && <label>Who is this contribution for?<select value={contributionFor} onChange={(event) => selectContributionDestination(event.target.value)}><option value="self">My own contribution</option><option disabled={linkedDependents.length === 0} value="all-dependents">All my dependents</option>{linkedDependents.map((dependent) => <option key={dependent.id} value={`dependent:${dependent.id}`}>{dependent.username}</option>)}<option value="other-person-or-group">On behalf of another person or group</option></select></label>}
+          {loggedInUser && <label className="checkbox-line"><input checked={anonymousContribution} onChange={(event) => setAnonymousContribution(event.target.checked)} type="checkbox" /> Recognize this contribution anonymously</label>}
+          {loggedInUser && contributionFor === 'other-person-or-group' && <div className="callout green selected-recognition"><span>{activeProfile ? <>Recognition will go to <strong>{activeProfile.name}</strong><small>{activeProfile.type} · {activeProfile.country}</small><small>Currently credited to this profile: Humanity {formatMoney(selectedRecognitionHumanityFundTotal)} · Stewardship {formatMoney(selectedRecognitionStewardshipFundTotal)}</small></> : <>Choose a person or group to recognize before making this contribution.</>}</span><button className="secondary" type="button" onClick={() => setShowContributionProfileModal(true)}>{activeProfile ? 'Change person or group' : 'Choose person or group'}</button></div>}
+          {loggedInUser && contributionFor === 'all-dependents' && <p className="muted small-note">{contributionValue > 0 ? `Your ${formatMoney(contributionValue)} total will be divided across ${contributionTargets.length} dependents: ${contributionTargets.map((dependent, index) => `${dependent.username} ${formatMoney(dependentContributionAmounts[index] ?? 0)}`).join(' · ')}.` : `Enter a total amount to preview the equal split across ${contributionTargets.length} dependents.`}</p>}
           <div className="form-grid compact contribution-entry-grid">
               <label>{amountLabel}<input disabled={!loggedInUser} min="0" placeholder={amountPlaceholder} type="number" value={loggedInUser ? amount : ''} onChange={(event) => setAmount(event.target.value)} /></label>
               <label>Asset type<select disabled={!loggedInUser} value={formAssetType} onChange={(event) => setAssetType(event.target.value as ContributionAssetType)}>{contributionAssetTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
@@ -1012,14 +1213,12 @@ function ContributeScreen({ amount, setAmount, assetType, setAssetType, mode, se
               </div>
               {fundGuideOpen && <div className="info-panel" id="fund-guide-panel"><strong>Fund guide</strong><p><b>Humanity Fund</b> grows long-term shared ownership and future participant benefits.</p><p><b>Stewardship Fund</b> supports legal, accounting, audit, governance, platform, verification, reporting, agents/tools, insurance, efficient operations, and prudent reserves.</p></div>}
             </div>
-            {activeProfile && loggedInUser && <label>Recognition goes to<input value={recognitionName} onChange={(event) => setRecognitionName(event.target.value)} /></label>}
-            {loggedInUser && contributionFor === 'self' && !activeProfile && <label className="checkbox-line"><input checked={anonymousContribution} onChange={(event) => setAnonymousContribution(event.target.checked)} type="checkbox" /> Recognize this contribution anonymously</label>}
-            {anonymousContribution && <p className="muted small-note">Recognition will show an alias like Anonymous 1. You will still see that the alias is yours when logged in.</p>}
+            {anonymousContribution && <p className="muted small-note">The contribution will show a stable anonymous contributor alias. The person or group receiving recognition remains visible.</p>}
             <label>How will you make your contribution?<select disabled={!loggedInUser} value={formPaymentMethod} onChange={(event) => { setPaymentMethod(event.target.value); setContributionError('') }} aria-invalid={Boolean(contributionError)}><option value="">Select payment method</option>{paymentMethods.map((method) => <option key={method}>{method}</option>)}</select></label>
             <button className="primary" disabled={!loggedInUser} type="button" onClick={() => { if (!formPaymentMethod) setContributionError('Please choose a payment method before continuing.'); else { setContributionError(''); setShowPaymentDetails(true) } }}>Make contribution</button>
             {contributionError && <div className="callout compact-callout">{contributionError}</div>}
             {message && <div className="callout green">{message}</div>}
-            {loggedInUser && <Metric label="Your total contributions" value={formatMoney(personalTotalContributions)} />}
+            {loggedInUser && <Metric label="All contributions you recorded" value={formatMoney(recordedContributionTotal)} note="your own contributions plus amounts you recorded on behalf of others" />}
           </div>
         </div>
         {loggedInUser && <div className="soft-card tree-card">
@@ -1052,67 +1251,252 @@ function ContributeScreen({ amount, setAmount, assetType, setAssetType, mode, se
           <Metric label="Your current circle" value={currentLevel.name} note={nextTierGap > 0 ? `${formatMoney(nextTierGap)} remaining until ${nextLevel.name}` : 'Rainforest circle reached'} />
         </div>}
       </div>
-      {loggedInUser && <div className="card-grid three contribution-totals-grid"><Metric label="Your Humanity Fund total" value={formatMoney(totalHumanity)} /><Metric label="Your Stewardship Fund total" value={formatMoney(totalStewardship)} /><Metric label="Your recycled claims" value={formatMoney(recycledClaims)} /></div>}
-      {loggedInUser && ledgerContributions.length > 0 && <div className="soft-card contribution-ledger"><h3>{ledgerTitle}</h3>{ledgerNote && <p className="muted">{ledgerNote}</p>}<div className="ledger-scroll">{[...ledgerContributions].reverse().map((entry) => <div className="ledger-row" key={entry.id}><strong>{formatMoney(entry.amount)}</strong><span>{getContributionLedgerDescription(entry, loggedInUser)} · {new Date(entry.createdAt ?? Date.now()).toLocaleDateString()}</span><small>Humanity {formatMoney(entry.humanityFund)} · Stewardship {formatMoney(entry.stewardshipReserve)}</small></div>)}</div></div>}
+      {loggedInUser && <>
+        <div className="card-grid three contribution-totals-grid"><Metric label="Your Humanity Fund total" value={formatMoney(totalHumanity)} note="your contributions for yourself only" /><Metric label="Your Stewardship Fund total" value={formatMoney(totalStewardship)} note="your contributions for yourself only" /><Metric label="Your own contribution total" value={formatMoney(personalTotalContributions)} note="your contributions before recognition received from other people" /></div>
+        <div className="card-grid three contribution-totals-grid"><Metric label="Recognition received for you" value={formatMoney(receivedContributionTotal)} note="contributed by other people on your behalf" /><Metric label="Total credited to your profile" value={formatMoney(creditedToProfileTotal)} note="the basis for your contribution circle" /><Metric label="Your recycled claims" value={formatMoney(recycledClaims)} /></div>
+        {onBehalfContributionGroups.length > 0 && <div className="soft-card contribution-on-behalf-summary"><h3>Contributions or recycled benefits you recorded on behalf of others</h3><p className="muted">These entries remain in your ledger, but their fund credit and recognition go to the selected person or group.</p><Metric label="Total recorded on behalf of others" value={formatMoney(onBehalfRecognitionTotal)} /><p className="muted small-note">Recycled rows grant recognition without adding new fund capital.</p><div className="on-behalf-contribution-list">{onBehalfContributionGroups.map((group) => <div className="on-behalf-contribution-row" key={group.key}><strong>{group.label}</strong><span>{formatMoney(group.amount)}</span><small>Humanity {formatMoney(group.humanityFund)} · Stewardship {formatMoney(group.stewardshipReserve)}</small></div>)}</div></div>}
+        {ledgerContributions.length > 0 && <div className="soft-card contribution-ledger"><h3>{ledgerTitle}</h3><p className="muted">{ledgerNote}</p><div className="ledger-scroll">{[...ledgerContributions].reverse().map((entry) => <div className="ledger-row" key={entry.id}><strong>{formatMoney(entry.amount)}</strong><span>{getContributionLedgerDescription(entry, loggedInUser)} · {new Date(entry.createdAt ?? Date.now()).toLocaleDateString()}</span><small>Humanity {formatMoney(entry.humanityFund)} · Stewardship {formatMoney(entry.stewardshipReserve)}</small></div>)}</div></div>}
+      </>}
       {loggedInUser && <div className="callout">You can proceed to Claim or go back to Connect to adjust your profile.</div>}
       <div className="nav-actions"><button className="secondary continue-cta" type="button" onClick={onBack}>← Back to Connect</button>{loggedInUser && <NextStep onClick={onNext}>Proceed to Claim</NextStep>}</div>
-      {showPaymentDetails && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Contribution details"><div className="modal-card payment-modal"><button className="modal-close" type="button" onClick={() => setShowPaymentDetails(false)}>×</button><h3>Contribution details</h3><p>{paymentIntro}</p><div className="payment-summary"><strong>{formatContributionAmount()}</strong><span>{selectedFundLabel}</span><span>{paymentMethod}</span></div>{paymentMethod === 'Crypto wallet' ? <div className="form-grid"><label>Cryptocurrency<select value={cryptoSymbol} onChange={(event) => setCryptoSymbol(event.target.value)}>{Object.entries(cryptoPriceExamples).map(([symbol, item]) => <option key={symbol} value={symbol}>{item.label}</option>)}</select></label><label>Wallet address<input placeholder="Paste wallet address" /></label></div> : paymentMethod === 'Stock transfer' ? <div className="form-grid"><label>Stock ticker<input value={stockTicker} onChange={(event) => setStockTicker(event.target.value.toUpperCase())} /></label><label>Number of shares<input min="0" type="number" value={amount} onChange={(event) => setAmount(event.target.value)} /></label><label>Broker or transfer agent<input placeholder="Brokerage name" /></label><label>Account reference<input placeholder="Reference number" /></label></div> : paymentMethod === 'Bill payment' ? <div className="form-grid"><label>Bank name<input placeholder="Your bank" /></label><label>Bill payment reference<input placeholder="Reference number" /></label><label>Account holder<input placeholder="Name" /></label><label>Payment date<input type="date" /></label></div> : paymentMethod === 'PayPal' ? <div className="form-grid"><label>PayPal email<input placeholder="name@example.com" type="email" /></label><label>PayPal reference<input placeholder="Reference note" /></label></div> : <div className="form-grid"><label>Cardholder name<input placeholder="Name on card" /></label><label>Card number<input placeholder="4242 4242 4242 4242" inputMode="numeric" /></label><label>Expiry<input placeholder="MM / YY" /></label><label>Security code<input placeholder="CVC" inputMode="numeric" /></label></div>}<button className="primary full-width" type="button" onClick={() => void confirmContribution()}>Save simulated contribution</button><p className="muted">Prototype only — no real payment, wallet, bank, card, crypto, or stock transfer is processed. Prototype prices are examples for contribution-equivalent estimates.</p></div></div>}
+      {showContributionProfileModal && <ContributionProfileModal activeProfile={activeProfile} countryOptions={countryOptions} form={form} loggedInUser={loggedInUser} onChange={onChangeProfileForm} onClearRecognitionProfile={onClearRecognitionProfile} onClose={() => setShowContributionProfileModal(false)} onSave={onSaveProfile} onSelectRecognitionProfile={onSelectRecognitionProfile} onUpdateContributionProfile={onUpdateContributionProfile} profileMessage={profileMessage} profiles={profiles} />}
+      {showPaymentDetails && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Contribution details">
+        <div className="modal-card payment-modal">
+          <button className="modal-close" type="button" onClick={() => setShowPaymentDetails(false)}>×</button>
+          <h3>Contribution details</h3>
+          <p>{paymentIntro}</p>
+          <div className="payment-summary"><strong>{formatContributionAmount()}</strong><span>{selectedFundLabel}</span><span>{paymentMethod}</span></div>
+          <p className="muted payment-details-lock-note">Payment-entry fields are intentionally disabled in this simulated prototype. Do not enter personal, payment, wallet, bank, brokerage, or account information.</p>
+          <fieldset className="payment-details-fields" disabled={paymentDetailsAreDisabled}>
+            {paymentMethod === 'Crypto wallet' ? <div className="form-grid"><label>Cryptocurrency<select value={cryptoSymbol} onChange={(event) => setCryptoSymbol(event.target.value)}>{Object.entries(cryptoPriceExamples).map(([symbol, item]) => <option key={symbol} value={symbol}>{item.label}</option>)}</select></label><label>Wallet address<input placeholder="Paste wallet address" /></label></div> : paymentMethod === 'Stock transfer' ? <div className="form-grid"><label>Stock ticker<input value={stockTicker} onChange={(event) => setStockTicker(event.target.value.toUpperCase())} /></label><label>Number of shares<input min="0" type="number" value={amount} onChange={(event) => setAmount(event.target.value)} /></label><label>Broker or transfer agent<input placeholder="Brokerage name" /></label><label>Account reference<input placeholder="Reference number" /></label></div> : paymentMethod === 'Bill payment' ? <div className="form-grid"><label>Bank name<input placeholder="Your bank" /></label><label>Bill payment reference<input placeholder="Reference number" /></label><label>Account holder<input placeholder="Name" /></label><label>Payment date<input type="date" /></label></div> : paymentMethod === 'PayPal' ? <div className="form-grid"><label>PayPal email<input placeholder="name@example.com" type="email" /></label><label>PayPal reference<input placeholder="Reference note" /></label></div> : <div className="form-grid"><label>Cardholder name<input placeholder="Name on card" /></label><label>Card number<input placeholder="4242 4242 4242 4242" inputMode="numeric" /></label><label>Expiry<input placeholder="MM / YY" /></label><label>Security code<input placeholder="CVC" inputMode="numeric" /></label></div>}
+          </fieldset>
+          <button className="primary full-width" type="button" onClick={() => void confirmContribution()}>Save simulated contribution</button>
+          <p className="muted">Prototype only — no real payment, wallet, bank, card, crypto, or stock transfer is processed. Prototype prices are examples for contribution-equivalent estimates.</p>
+        </div>
+      </div>}
     </div>
   )
 }
 
-function isChildAgeGroup(ageGroup: string) {
-  return ['0–5', '6–10', '11–15'].includes(ageGroup)
+function ContributionProfileModal({ activeProfile, countryOptions, form, loggedInUser, onChange, onClearRecognitionProfile, onClose, onSave, onSelectRecognitionProfile, onUpdateContributionProfile, profileMessage, profiles }: { activeProfile: Profile | null; countryOptions: string[]; form: ContributionProfileForm; loggedInUser: User | null; onChange: (value: ContributionProfileForm) => void; onClearRecognitionProfile: () => void; onClose: () => void; onSave: () => Promise<Profile | null>; onSelectRecognitionProfile: (profile: Profile) => void; onUpdateContributionProfile: (profileId: string, input: { name: string; type: string; country: string; description: string }) => Promise<Profile | null>; profileMessage: string; profiles: Profile[] }) {
+  const [profileMode, setProfileMode] = useState<'search' | 'create' | 'modify'>('search')
+  const [profileTypeFilter, setProfileTypeFilter] = useState('')
+  const [profileCountryFilter, setProfileCountryFilter] = useState('')
+  const [profileSearch, setProfileSearch] = useState('')
+  const [draftRecognitionProfile, setDraftRecognitionProfile] = useState<Profile | null>(activeProfile)
+  const [recognitionMessage, setRecognitionMessage] = useState('')
+  const [recognitionAction, setRecognitionAction] = useState<'confirmed' | 'cleared' | ''>('')
+  const [profileBeingModified, setProfileBeingModified] = useState<Profile | null>(null)
+  const [profileCreateErrors, setProfileCreateErrors] = useState<{ type?: string; name?: string; country?: string }>({})
+  const [selectionVersion, setSelectionVersion] = useState(0)
+  const selectedProfileConfirmationRef = useRef<HTMLDivElement>(null)
+  const update = (field: keyof ContributionProfileForm, value: string) => onChange({ ...form, [field]: value })
+  useEffect(() => {
+    if (!form.name) return
+    const selected = profiles.find((profile) => profile.name === form.name && (!form.country || profile.country === form.country))
+    if (!selected) return
+    setDraftRecognitionProfile(selected)
+    setProfileTypeFilter(selected.type)
+    setProfileCountryFilter(selected.country)
+    setProfileSearch(selected.name)
+  }, [form.country, form.name, profiles])
+  useEffect(() => {
+    if (!draftRecognitionProfile || selectionVersion === 0) return undefined
+    const frame = window.requestAnimationFrame(() => {
+      const confirmation = selectedProfileConfirmationRef.current
+      if (!confirmation) return
+      const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+      confirmation.scrollIntoView({ behavior, block: 'center' })
+      confirmation.focus({ preventScroll: true })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [draftRecognitionProfile, selectionVersion])
+  const hasProfileFilters = Boolean(profileTypeFilter || profileCountryFilter || profileSearch)
+  const matchesProfileSearch = (profile: Profile) => {
+    const matchesType = !profileTypeFilter || profile.type === profileTypeFilter
+    const matchesCountry = !profileCountryFilter || profile.country === profileCountryFilter
+    const haystack = `${profile.name} ${profile.country} ${profile.description}`.toLowerCase()
+    return matchesType && matchesCountry && haystack.includes(profileSearch.toLowerCase())
+  }
+  const profileSearchRank = (profile: Profile) => {
+    const needle = profileSearch.toLowerCase()
+    const name = profile.name.toLowerCase()
+    if (!needle) return 2
+    if (name.startsWith(needle)) return 0
+    if (name.includes(needle)) return 1
+    return 2
+  }
+  const profileMatches = hasProfileFilters ? profiles.filter(matchesProfileSearch).sort((a, b) => profileSearchRank(a) - profileSearchRank(b) || a.name.localeCompare(b.name)) : []
+  const ownedContributionProfiles = loggedInUser ? profiles.filter((profile) => profile.createdByUserId === loggedInUser.id).sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')) : []
+  const canManageDraftRecognitionProfile = Boolean(draftRecognitionProfile?.createdByUserId && loggedInUser?.id && draftRecognitionProfile.createdByUserId === loggedInUser.id)
+  const resetContributionProfileForm = () => {
+    onChange({ ...form, name: '', type: '', country: '', ageGroup: '', description: '' })
+    setProfileCreateErrors({})
+    setProfileBeingModified(null)
+  }
+  const handleProfileModeChange = (mode: 'search' | 'create' | 'modify') => {
+    setProfileMode(mode)
+    setRecognitionMessage('')
+    setRecognitionAction('')
+    if (mode === 'create') resetContributionProfileForm()
+    if (mode !== 'modify') setProfileBeingModified(null)
+  }
+  const stageRecognitionProfile = (profile: Profile) => {
+    setSelectionVersion((current) => current + 1)
+    setDraftRecognitionProfile(profile)
+    setRecognitionAction('')
+    setRecognitionMessage(`Selected ${profile.name}. Confirm to use this person or group for the contribution.`)
+  }
+  const confirmRecognitionProfile = () => {
+    if (!draftRecognitionProfile) return
+    onSelectRecognitionProfile(draftRecognitionProfile)
+    setRecognitionAction('confirmed')
+    setRecognitionMessage(`${draftRecognitionProfile.name} will receive recognition for this contribution.`)
+    onClose()
+  }
+  const clearRecognitionSelection = () => {
+    onClearRecognitionProfile()
+    setDraftRecognitionProfile(null)
+    setProfileBeingModified(null)
+    setRecognitionAction('cleared')
+    setRecognitionMessage('The contribution profile selection was cleared.')
+  }
+  const saveCreatedProfile = async () => {
+    const errors: { type?: string; name?: string; country?: string } = {}
+    if (!form.type) errors.type = 'Choose a contribution profile type.'
+    if (!form.name.trim()) errors.name = 'Enter a person or group name.'
+    if (!form.country) errors.country = 'Choose a country.'
+    setProfileCreateErrors(errors)
+    if (Object.keys(errors).length > 0) return
+    const saved = await onSave()
+    if (saved) {
+      stageRecognitionProfile(saved)
+      setProfileMode('search')
+    }
+  }
+  const selectProfileToModify = (profile: Profile) => {
+    setProfileBeingModified(profile)
+    onChange({ ...form, name: profile.name, type: profile.type, country: profile.country, ageGroup: profile.ageGroup, description: profile.description })
+    setProfileCreateErrors({})
+    setRecognitionAction('')
+    setRecognitionMessage(`Editing ${profile.name}. Save the changes when ready.`)
+  }
+  const saveModifiedProfile = async () => {
+    if (!profileBeingModified) return
+    const errors: { type?: string; name?: string; country?: string } = {}
+    if (!form.type) errors.type = 'Choose a contribution profile type.'
+    if (!form.name.trim()) errors.name = 'Enter a person or group name.'
+    if (!form.country) errors.country = 'Choose a country.'
+    setProfileCreateErrors(errors)
+    if (Object.keys(errors).length > 0) return
+    const saved = await onUpdateContributionProfile(profileBeingModified.id, { name: form.name, type: form.type, country: form.country, description: form.description })
+    if (saved) {
+      stageRecognitionProfile(saved)
+      setProfileBeingModified(null)
+      setProfileMode('search')
+    }
+  }
+
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Choose a person or group for recognition">
+    <div className="modal-card contribution-profile-modal">
+      <button className="modal-close" type="button" onClick={onClose}>×</button>
+      <h3>Contribute on behalf of or in honour of a person or group</h3>
+      <p className="muted">Search existing contribution profiles first. If the person, faith group, organization, memorial, honour profile, family, or community group is not there, create a short public contribution profile so others can identify it correctly.</p>
+      <div className="mode-row contribution-profile-mode">
+        <button className={`secondary contribution-mode-button${profileMode === 'search' ? ' selected' : ''}`} type="button" onClick={() => handleProfileModeChange('search')}>Search contribution profiles</button>
+        <button className={`secondary contribution-mode-button${profileMode === 'create' ? ' selected' : ''}`} type="button" onClick={() => handleProfileModeChange('create')}>Create contribution profile</button>
+        <button className={`secondary contribution-mode-button${profileMode === 'modify' ? ' selected' : ''}`} type="button" onClick={() => handleProfileModeChange('modify')}>Modify contribution profile</button>
+      </div>
+
+      {profileMode === 'search' && <div className="form-stack">
+        <div className="form-grid profile-filter-grid">
+          <label>Filter by contribution profile type<select value={profileTypeFilter} onChange={(event) => { setProfileTypeFilter(event.target.value); setDraftRecognitionProfile(null); setRecognitionMessage('') }}><option value="">All contribution profiles</option>{contributionProfileTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
+          <label>Filter by country<select value={profileCountryFilter} onChange={(event) => { setProfileCountryFilter(event.target.value); setDraftRecognitionProfile(null); setRecognitionMessage('') }}><option value="">Any country</option>{countryOptions.map((country) => <option key={country}>{country}</option>)}</select></label>
+          <label className="profile-search-field">Search by name or description<input value={profileSearch} onChange={(event) => { setProfileSearch(event.target.value); setDraftRecognitionProfile(null); setRecognitionMessage('') }} type="search" /></label>
+        </div>
+        {!hasProfileFilters && <p className="muted empty-results-note">Choose a contribution profile type, country, or start searching to find a contribution profile.</p>}
+        {hasProfileFilters && <div className="profile-results">{profileMatches.length > 0 ? profileMatches.map((profile) => <button key={profile.id} type="button" onClick={() => stageRecognitionProfile(profile)}><strong>{profile.name}</strong><span>{profile.type} · {profile.country}</span><small>{profile.description}</small></button>) : <p className="muted">No contribution profiles match those filters yet.</p>}</div>}
+        {draftRecognitionProfile && <div aria-label="Selected contribution profile confirmation" className={`callout green selected-recognition ${recognitionAction}`} ref={selectedProfileConfirmationRef} tabIndex={-1}><span>Selected contribution profile: <strong>{draftRecognitionProfile.name}</strong><small>{draftRecognitionProfile.type} · {draftRecognitionProfile.country}</small>{!canManageDraftRecognitionProfile && <small>Locked for editing unless you created this profile.</small>}</span><div className="selected-recognition-actions"><button className={`secondary ${recognitionAction === 'confirmed' ? 'action-clicked' : ''}`} type="button" onClick={confirmRecognitionProfile}>Confirm this contribution profile</button><button className={`secondary ${recognitionAction === 'cleared' ? 'action-clicked' : ''}`} type="button" onClick={clearRecognitionSelection}>Clear this contribution profile</button></div></div>}
+        {recognitionMessage && <div className={`callout green compact-callout ${recognitionAction}`}>{recognitionMessage}</div>}
+      </div>}
+
+      {profileMode === 'create' && <div className="form-stack">
+        <div className="form-grid create-profile-grid">
+          <label>Contribution profile type<select id="contribution-profile-type" value={form.type} onChange={(event) => { update('type', event.target.value); setProfileCreateErrors((current) => ({ ...current, type: undefined })) }} aria-invalid={Boolean(profileCreateErrors.type)}><option value="">Select contribution profile type</option>{contributionProfileTypes.map((type) => <option key={type}>{type}</option>)}</select>{profileCreateErrors.type && <small className="field-error">{profileCreateErrors.type}</small>}</label>
+          <label>Country<select id="contribution-profile-country" value={form.country} onChange={(event) => { update('country', event.target.value); setProfileCreateErrors((current) => ({ ...current, country: undefined })) }} aria-invalid={Boolean(profileCreateErrors.country)}><option value="">Select country</option>{countryOptions.map((country) => <option key={country}>{country}</option>)}</select>{profileCreateErrors.country && <small className="field-error">{profileCreateErrors.country}</small>}</label>
+          <label className="profile-name-field">Name a person or group<input id="contribution-profile-name" value={form.name} onChange={(event) => { update('name', event.target.value); setProfileCreateErrors((current) => ({ ...current, name: undefined })) }} placeholder="Name of person, group, or organization" type="text" aria-invalid={Boolean(profileCreateErrors.name)} />{profileCreateErrors.name && <small className="field-error">{profileCreateErrors.name}</small>}</label>
+        </div>
+        <label>Short public description<textarea value={form.description} onChange={(event) => update('description', event.target.value)} placeholder="A short description so supporters can identify this contribution profile without collecting sensitive personal details." /></label>
+        <button className="secondary" type="button" onClick={() => { void saveCreatedProfile() }}>Save profile to prototype file</button>
+        {profileMessage && <div className="callout green">{profileMessage}</div>}
+      </div>}
+
+      {profileMode === 'modify' && <div className="form-stack">
+        {!loggedInUser && <p className="muted empty-results-note">Log in to modify contribution profiles you created.</p>}
+        {loggedInUser && ownedContributionProfiles.length === 0 && <p className="muted empty-results-note">No contribution profiles created by this account yet.</p>}
+        {loggedInUser && ownedContributionProfiles.length > 0 && <div className="profile-results">{ownedContributionProfiles.map((profile) => <button key={profile.id} type="button" onClick={() => selectProfileToModify(profile)}><strong>{profile.name}</strong><span>{profile.type} · {profile.country}</span><small>{profile.description || 'No public description yet.'}</small></button>)}</div>}
+        {profileBeingModified && <>
+          <div className="form-grid create-profile-grid">
+            <label>Contribution profile type<select id="contribution-profile-type" value={form.type} onChange={(event) => { update('type', event.target.value); setProfileCreateErrors((current) => ({ ...current, type: undefined })) }} aria-invalid={Boolean(profileCreateErrors.type)}><option value="">Select contribution profile type</option>{contributionProfileTypes.map((type) => <option key={type}>{type}</option>)}</select>{profileCreateErrors.type && <small className="field-error">{profileCreateErrors.type}</small>}</label>
+            <label>Country<select id="contribution-profile-country" value={form.country} onChange={(event) => { update('country', event.target.value); setProfileCreateErrors((current) => ({ ...current, country: undefined })) }} aria-invalid={Boolean(profileCreateErrors.country)}><option value="">Select country</option>{countryOptions.map((country) => <option key={country}>{country}</option>)}</select>{profileCreateErrors.country && <small className="field-error">{profileCreateErrors.country}</small>}</label>
+            <label className="profile-name-field">Name a person or group<input id="contribution-profile-name" value={form.name} onChange={(event) => { update('name', event.target.value); setProfileCreateErrors((current) => ({ ...current, name: undefined })) }} placeholder="Name of person, group, or organization" type="text" aria-invalid={Boolean(profileCreateErrors.name)} />{profileCreateErrors.name && <small className="field-error">{profileCreateErrors.name}</small>}</label>
+          </div>
+          <label>Short public description<textarea value={form.description} onChange={(event) => update('description', event.target.value)} placeholder="A short description so supporters can identify this contribution profile without collecting sensitive personal details." /></label>
+          <button className="secondary" type="button" onClick={() => { void saveModifiedProfile() }}>Save modified contribution profile</button>
+        </>}
+        {recognitionMessage && <div className="callout green compact-callout">{recognitionMessage}</div>}
+        {profileMessage && <div className="callout green">{profileMessage}</div>}
+      </div>}
+    </div>
+  </div>
 }
 
-function ClaimScreen({ method, setMethod, setAgeBracket, claimPreview, claims, dependents, funds, loggedInUser, users, verificationDraft, onBack, onNext, onSaveClaims, onVerifyHuman }: { method: VerificationMethod; setMethod: (method: VerificationMethod) => void; setAgeBracket: (ageBracket: AgeBracket) => void; claimPreview: ReturnType<typeof calculatePayoutScenario>; claims: ClaimRecord[]; dependents: User[]; funds: Funds; loggedInUser: User | null; users: User[]; verificationDraft: ReturnType<typeof createSimulatedVerificationDraft>; onBack: () => void; onNext: () => void; onSaveClaims: (input: { action: 'claimed' | 'recycled'; amount: number; targetUserIds: string[]; deliveryMethod?: string; denomination?: string; allocationMode?: AllocationMode; isAnonymous?: boolean }) => Promise<{ ok: boolean; error?: string; claims?: ClaimRecord[]; contributions?: Contribution[] }>; onVerifyHuman: (input: { verificationMethod: VerificationMethod; verificationStatus: '16_plus' | '0_15' | 'dependent'; guardianUsername: string }) => Promise<{ ok: boolean; error?: string; user?: User }> }) {
-  const linkedDependents = loggedInUser ? dependents.filter((user) => user.id !== loggedInUser.id && (user.guardianUsername === loggedInUser.username || (!user.guardianUsername && user.connector === loggedInUser.username && isChildAgeGroup(user.ageGroup)))) : []
+function ClaimScreen({ method, setMethod, claimPreview, claims, users, funds, loggedInUser, onBack, onNext, onSaveClaims, onVerifyHuman, profiles }: { method: VerificationMethod; setMethod: (method: VerificationMethod) => void; claimPreview: ReturnType<typeof calculatePayoutScenario>; claims: ClaimRecord[]; users: User[]; funds: Funds; loggedInUser: User | null; onBack: () => void; onNext: () => void; onSaveClaims: (input: { action: 'claimed' | 'recycled'; amount: number; targetUserIds: string[]; deliveryMethod?: string; denomination?: string; allocationMode?: AllocationMode; isAnonymous?: boolean; recycleDestinations?: Array<{ profileId: string }> }) => Promise<{ ok: boolean; error?: string; claims?: ClaimRecord[]; contributions?: Contribution[] }>; onVerifyHuman: (input: { verificationMethod: VerificationMethod }) => Promise<{ ok: boolean; error?: string; user?: User }>; profiles: Profile[] }) {
+  const linkedDependents = loggedInUser ? users.filter((user) => user.id !== loggedInUser.id && hasGuardianConnection(user, loggedInUser.id, 'accepted')) : []
+  const parentGuardianConnections = getGuardianConnections(loggedInUser)
+  const acceptedParentGuardianConnections = parentGuardianConnections.filter((connection) => connection.guardianStatus === 'accepted')
+  const hasParentGuardian = parentGuardianConnections.some((connection) => connection.guardianStatus === 'pending' || connection.guardianStatus === 'accepted')
   const [claimFor, setClaimFor] = useState('self')
   const [showVerificationModal, setShowVerificationModal] = useState(false)
+  const [showVerificationMethodChooser, setShowVerificationMethodChooser] = useState(false)
   const [showClaimModal, setShowClaimModal] = useState(false)
   const [showRecycleModal, setShowRecycleModal] = useState(false)
+  const [showRecycleRecipientModal, setShowRecycleRecipientModal] = useState(false)
   const [claimMessage, setClaimMessage] = useState('')
   const [verificationError, setVerificationError] = useState('')
   const [verifiedForPrototype, setVerifiedForPrototype] = useState(Boolean(loggedInUser?.verifiedHumanAt))
-  const [verifiedStatus, setVerifiedStatus] = useState<'16_plus' | '0_15' | 'dependent'>(loggedInUser?.verificationStatus ?? '16_plus')
-  const [guardianAccount, setGuardianAccount] = useState(loggedInUser?.guardianUsername ?? '')
-  const [twoStepEmail, setTwoStepEmail] = useState('')
-  const [twoStepPhone, setTwoStepPhone] = useState('')
-  const [guardianSearch, setGuardianSearch] = useState(loggedInUser?.guardianUsername ?? '')
-  const [guardianCountry, setGuardianCountry] = useState('')
-  const [guardianAgeGroup, setGuardianAgeGroup] = useState('')
   const [claimDeliveryStep, setClaimDeliveryStep] = useState<'choose' | 'details'>('choose')
   const [claimMethod, setClaimMethod] = useState('E-transfer')
   const [claimDenomination, setClaimDenomination] = useState('My country’s currency')
   const [claimCrypto, setClaimCrypto] = useState('Bitcoin')
   const [recycleAllocationMode, setRecycleAllocationMode] = useState<AllocationMode>('humanity')
   const [recycleAnonymously, setRecycleAnonymously] = useState(false)
-  const [claimContact, setClaimContact] = useState('')
-  const [claimAccount, setClaimAccount] = useState('')
-  const effectiveMethod = method
+  const [recycleFor, setRecycleFor] = useState('self')
+  const [recycleRecipientProfile, setRecycleRecipientProfile] = useState<Profile | null>(null)
+  const verificationDetailsAreDisabled = true
+  const claimDeliveryDetailsAreDisabled = true
   const savedMethod = loggedInUser?.verificationMethod ?? ''
+  const effectiveMethod = method || savedMethod
   const methodLabel = effectiveMethod === 'world-id' ? 'World ID proof of human' : effectiveMethod === 'other' ? 'Other proof-of-human path' : effectiveMethod === 'government-id-liveness' ? 'Government ID' : savedMethod === 'world-id' ? 'World ID proof of human' : savedMethod === 'other' ? 'Other proof-of-human path' : 'Government ID'
-  const canSelfClaim = verifiedForPrototype && verifiedStatus === '16_plus'
-  const shouldUseGuardian = verifiedForPrototype && verifiedStatus !== '16_plus'
-  const inferredStatus = loggedInUser && isChildAgeGroup(loggedInUser.ageGroup) ? '0_15' : loggedInUser?.verificationStatus ?? '16_plus'
+  const claimPathway = hasParentGuardian ? 'parent-guardian-must-claim' : 'claim-for-self'
+  const canSelfClaim = verifiedForPrototype && claimPathway === 'claim-for-self'
+  const shouldUseGuardian = verifiedForPrototype && claimPathway === 'parent-guardian-must-claim'
+  const guardianClaimPending = shouldUseGuardian && acceptedParentGuardianConnections.length === 0
   const selectedDependent = claimFor.startsWith('dependent:') ? linkedDependents.find((user) => user.id === claimFor.replace('dependent:', '')) : null
   const selectedDependentCount = claimFor === 'all-dependents' ? linkedDependents.length : selectedDependent ? 1 : 0
   const claimAmount = Math.max(0, claimPreview.quarterlyPerClaimant)
   const displayedClaimAmount = claimFor === 'self' ? claimAmount : claimAmount * selectedDependentCount
   const visibleClaimAmount = shouldUseGuardian ? claimAmount : displayedClaimAmount
   const claimTargets = claimFor === 'self' && loggedInUser ? [loggedInUser] : claimFor === 'all-dependents' ? linkedDependents : selectedDependent ? [selectedDependent] : []
-  const selectedClaimLedgerUsers = shouldUseGuardian && loggedInUser ? [loggedInUser] : claimFor === 'self' && loggedInUser ? [loggedInUser] : claimFor === 'all-dependents' ? linkedDependents : selectedDependent ? [selectedDependent] : []
-  const visibleProfileIds = new Set(selectedClaimLedgerUsers.map((user) => user.profileId).filter(Boolean) as string[])
-  const visibleClaimRecords = claims.filter((claim) => visibleProfileIds.has(claim.profileId) && claim.action === 'claimed').sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
-  const totalClaimed = visibleClaimRecords.reduce((total, claim) => total + claim.amount, 0)
-  const guardianMatches = users.filter((user) => {
-    const isLoggedInUser = Boolean(loggedInUser && user.id === loggedInUser.id)
-    const matchesText = !guardianSearch || user.username.toLowerCase().startsWith(guardianSearch.toLowerCase())
-    const matchesCountry = !guardianCountry || user.country === guardianCountry
-    const matchesAge = !guardianAgeGroup || user.ageGroup === guardianAgeGroup
-    return !isLoggedInUser && matchesText && matchesCountry && matchesAge
-  }).slice(0, 6)
-  const hasGuardianFilters = Boolean(guardianSearch || guardianCountry || guardianAgeGroup)
+  const ownBenefitRecords = loggedInUser ? claims.filter((claim) => claim.userId === loggedInUser.id || claim.profileId === loggedInUser.profileId).sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')) : []
+  const dependentBenefitGroups = linkedDependents.map((dependent) => ({ dependent, records: claims.filter((claim) => claim.userId === dependent.id || claim.profileId === dependent.profileId).sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')) })).filter((group) => group.records.length > 0)
+  const dependentBenefitRecords = dependentBenefitGroups.flatMap((group) => group.records)
+  const allBenefitRecordsRecordedByUser = loggedInUser ? claims.filter((claim) => claim.actorUserId === loggedInUser.id || (!claim.actorUserId && claim.userId === loggedInUser.id)) : []
+  const totalOwnBenefits = ownBenefitRecords.reduce((total, claim) => total + claim.amount, 0)
+  const totalDependentBenefits = dependentBenefitRecords.reduce((total, claim) => total + claim.amount, 0)
+  const totalBenefitsRecordedByUser = allBenefitRecordsRecordedByUser.reduce((total, claim) => total + claim.amount, 0)
+  const totalClaimedAcrossProfiles = claims.filter((claim) => claim.action === 'claimed').reduce((total, claim) => total + claim.amount, 0)
+  const totalRecycledAcrossProfiles = claims.filter((claim) => claim.action === 'recycled').reduce((total, claim) => total + claim.amount, 0)
   const denominationLabel = claimDenomination === 'Cryptocurrency' ? claimCrypto : claimDenomination
   const claimMethodFields = claimMethod === 'E-transfer'
     ? ['Email or phone for e-transfer', 'Security note / claim reference']
@@ -1123,19 +1507,28 @@ function ClaimScreen({ method, setMethod, setAgeBracket, claimPreview, claims, d
         : claimMethod === 'Crypto wallet'
           ? ['Wallet address', 'Network / chain']
           : ['Receiving details', 'Claim reference']
+  const selectedRecycleDependent = recycleFor.startsWith('dependent:') ? linkedDependents.find((user) => user.id === recycleFor.replace('dependent:', '')) : null
+  const recycleRecipientUsers = recycleFor === 'self' && loggedInUser ? [loggedInUser] : recycleFor === 'all-dependents' ? linkedDependents : selectedRecycleDependent ? [selectedRecycleDependent] : []
+  const recycleDestinations = recycleFor === 'other-person-or-group'
+    ? recycleRecipientProfile ? [{ profileId: recycleRecipientProfile.id }] : []
+    : recycleRecipientUsers.flatMap((user) => user.profileId ? [{ profileId: user.profileId }] : [])
+  const recycleRecipientLabel = recycleFor === 'other-person-or-group'
+    ? recycleRecipientProfile?.name ?? 'Choose a person or group'
+    : recycleFor === 'all-dependents'
+      ? 'All my dependents'
+      : selectedRecycleDependent?.username ?? loggedInUser?.username ?? 'Myself'
 
   useEffect(() => {
     setVerifiedForPrototype(Boolean(loggedInUser?.verifiedHumanAt))
-    setVerifiedStatus(inferredStatus)
-    setGuardianAccount(loggedInUser?.guardianUsername ?? '')
-    setGuardianSearch(loggedInUser?.guardianUsername ?? '')
+    setShowVerificationMethodChooser(false)
     setMethod('')
-  }, [inferredStatus, loggedInUser, setMethod])
+  }, [loggedInUser?.id, loggedInUser?.verifiedHumanAt, setMethod])
 
   useEffect(() => {
-    if (claimFor === 'all-dependents' && linkedDependents.length === 0) setClaimFor(canSelfClaim ? 'self' : '')
-    if (claimFor.startsWith('dependent:') && !selectedDependent) setClaimFor(linkedDependents.length > 0 ? 'all-dependents' : canSelfClaim ? 'self' : '')
-  }, [canSelfClaim, claimFor, linkedDependents.length, selectedDependent])
+    if (shouldUseGuardian) setClaimFor('')
+    else if (claimFor === 'all-dependents' && linkedDependents.length === 0) setClaimFor(canSelfClaim ? 'self' : '')
+    else if (claimFor.startsWith('dependent:') && !selectedDependent) setClaimFor(linkedDependents.length > 0 ? 'all-dependents' : canSelfClaim ? 'self' : '')
+  }, [canSelfClaim, claimFor, linkedDependents.length, selectedDependent, shouldUseGuardian])
 
   const saveVerificationDraft = async () => {
     if (!effectiveMethod) {
@@ -1144,18 +1537,15 @@ function ClaimScreen({ method, setMethod, setAgeBracket, claimPreview, claims, d
       return
     }
     const verificationMethod = effectiveMethod
-    const result = await onVerifyHuman({ verificationMethod, verificationStatus: verifiedStatus, guardianUsername: guardianAccount })
+    const result = await onVerifyHuman({ verificationMethod })
     if (!result.ok) return
     setVerifiedForPrototype(true)
     setMethod('')
-    if (verifiedStatus === '16_plus') setClaimFor('self')
+    setShowVerificationMethodChooser(false)
+    if (claimPathway === 'claim-for-self') setClaimFor('self')
     else setClaimFor('')
     setShowVerificationModal(false)
     setVerificationError('')
-  }
-  const selectGuardianForVerification = (user: User) => {
-    setGuardianAccount(user.username)
-    setGuardianSearch(user.username)
   }
   const savePrototypeClaim = async () => {
     const result = await onSaveClaims({ action: 'claimed', amount: claimAmount, targetUserIds: claimTargets.map((target) => target.id), deliveryMethod: claimMethod, denomination: denominationLabel })
@@ -1163,19 +1553,32 @@ function ClaimScreen({ method, setMethod, setAgeBracket, claimPreview, claims, d
       setClaimMessage(result.error ?? 'Could not save claim.')
       return
     }
-    setClaimMessage(`Saved ${result.claims?.length ?? 0} claim record${result.claims?.length === 1 ? '' : 's'} to the prototype ledger.`)
+    setClaimMessage(`Saved ${result.claims?.length ?? 0} simulated benefit record${result.claims?.length === 1 ? '' : 's'} to the appropriate profile ledger.`)
     setShowClaimModal(false)
     setClaimDeliveryStep('choose')
   }
+  const openRecycleBenefit = () => {
+    setRecycleFor(claimFor === 'all-dependents' || claimFor.startsWith('dependent:') ? claimFor : 'self')
+    setRecycleRecipientProfile(null)
+    setShowRecycleModal(true)
+  }
+  const selectRecycleRecipient = (recipient: string) => {
+    setRecycleFor(recipient)
+    if (recipient === 'other-person-or-group') setShowRecycleRecipientModal(true)
+  }
   const recyclePrototypeClaim = async () => {
+    if (recycleDestinations.length === 0) {
+      setClaimMessage('Choose who should receive credit for this recycled benefit before saving it.')
+      return
+    }
     const fundLabel = allocationOptions.find((option) => option.id === recycleAllocationMode)?.label ?? 'Humanity Fund'
-    const result = await onSaveClaims({ action: 'recycled', amount: claimAmount, targetUserIds: claimTargets.map((target) => target.id), deliveryMethod: `Recycled into ${fundLabel}`, denomination: `${fundLabel} credit`, allocationMode: recycleAllocationMode, isAnonymous: recycleAnonymously })
+    const result = await onSaveClaims({ action: 'recycled', amount: claimAmount, targetUserIds: claimTargets.map((target) => target.id), deliveryMethod: `Recycled into ${fundLabel}`, denomination: `${fundLabel} credit`, allocationMode: recycleAllocationMode, isAnonymous: recycleAnonymously, recycleDestinations })
     if (!result.ok) {
-      setClaimMessage(result.error ?? 'Could not recycle claim.')
+      setClaimMessage(result.error ?? 'Could not recycle benefit.')
       return
     }
     const alias = result.contributions?.find((entry) => entry.isAnonymous)?.anonymousAlias
-    setClaimMessage(`Recycled ${result.claims?.length ?? 0} claim record${result.claims?.length === 1 ? '' : 's'} into the contribution ledger${alias ? ` anonymously under ${alias}` : ''}.`)
+    setClaimMessage(`Recycled ${result.claims?.length ?? 0} benefit record${result.claims?.length === 1 ? '' : 's'} for ${recycleRecipientLabel}. The corresponding contribution and profile ledgers are updated${alias ? ` anonymously under ${alias}` : ''}.`)
     setRecycleAnonymously(false)
     setShowRecycleModal(false)
   }
@@ -1183,35 +1586,39 @@ function ClaimScreen({ method, setMethod, setAgeBracket, claimPreview, claims, d
   return (
     <div className="screen-content">
       <SectionTitle eyebrow="Claim" title="Claim or recycle your benefit to participate in Equity for Humanity.">
-        Before anyone can claim, please first verify that you are a unique human once. Once that one-time verification is connected to the account, eligible people can claim for themselves or for any children or dependents that are linked to their account.
+        This is a fictional, local prototype. It records simulated benefit choices and never verifies identity, receives a claim, or moves money.
       </SectionTitle>
 
       <div className="card-grid two">
         <div className={`soft-card claim-flow-card ${verifiedForPrototype ? 'verified-step' : ''}`}>
           <p className="eyebrow">Step 1</p>
           <h3>{verifiedForPrototype ? 'You have verified your human status' : 'Verify that you are human'}</h3>
-          <p className="muted">{verifiedForPrototype ? `You have verified yourself with your ${methodLabel}. This verified-human status is saved to your account, so you can go straight to claim setup when you log in again.` : 'This happens once per person before claiming. The verification checks age/status too: ages 0–15 need a parent or guardian claim, while 16+ can claim for themselves.'}</p>
+          <p className="muted">{verifiedForPrototype ? `Your saved prototype verification method is ${methodLabel}. Review it only when you want to inspect or change the simulated method.` : 'Choose a simulated proof-of-human method before recording a prototype benefit choice. No proof is sent, stored, or verified.'}</p>
           <div className="form-stack">
-            <label>Choose how you want to verify being human<select value={effectiveMethod} onChange={(event) => { setMethod(event.target.value as VerificationMethod); setVerificationError('') }} aria-invalid={Boolean(verificationError)}><option value="">Choose method</option><option value="government-id-liveness">Government ID</option><option value="world-id">World ID</option><option value="other">Other proof-of-human path</option></select></label>
-            <button className="primary" type="button" onClick={() => { if (!effectiveMethod) setVerificationError('Please choose a verification method before proceeding.'); else setShowVerificationModal(true) }}>{verifiedForPrototype ? 'Review or update saved verification' : 'Verify human status'}</button>
+            {verifiedForPrototype && !showVerificationMethodChooser ? <>
+              <div className="callout green compact-callout"><strong>{claimPathway === 'claim-for-self' ? 'Claim for yourself' : 'Parent / guardian must claim'}</strong><small>{claimPathway === 'claim-for-self' ? 'No active parent / guardian connection is identified for this profile.' : guardianClaimPending ? 'A parent / guardian is identified but still needs to accept the connection in Connect.' : 'An active parent / guardian connection is identified for this profile.'}</small></div>
+              <button className="secondary" type="button" onClick={() => { setMethod(savedMethod); setShowVerificationMethodChooser(true); setVerificationError('') }}>Review or update saved verification</button>
+            </> : <>
+              <label>Choose how you want to verify being human<select value={effectiveMethod} onChange={(event) => { setMethod(event.target.value as VerificationMethod); setVerificationError('') }} aria-invalid={Boolean(verificationError)}><option value="">Choose method</option><option value="government-id-liveness">Government ID</option><option value="world-id">World ID</option><option value="other">Other proof-of-human path</option></select></label>
+              <div className="nav-actions"><button className="primary" type="button" onClick={() => { if (!effectiveMethod) setVerificationError('Please choose a verification method before proceeding.'); else setShowVerificationModal(true) }}>Confirm verification method</button>{verifiedForPrototype && <button className="secondary" type="button" onClick={() => { setShowVerificationMethodChooser(false); setMethod(''); setVerificationError('') }}>Cancel review</button>}</div>
+            </>}
             {verificationError && <div className="callout compact-callout">{verificationError}</div>}
-            {verifiedForPrototype && <div className="callout green compact-callout">{verifiedStatus === '16_plus' ? 'This account can make its own claim.' : 'This account needs a parent or guardian account to claim the benefit.'}</div>}
           </div>
         </div>
 
         <div className={`soft-card claim-flow-card ${!verifiedForPrototype ? 'pending-step' : ''}`}>
           <p className="eyebrow">Step 2</p>
           <h3>Set up the claim</h3>
-          {!verifiedForPrototype && <p className="muted">Complete Step 1 first. The claim options unlock after verified-human status and age/status are attached to the account.</p>}
+          {!verifiedForPrototype && <p className="muted">Complete Step 1 first. The benefit options unlock after a simulated verification method is saved to this account.</p>}
           <div className="form-stack">
             {shouldUseGuardian ? <>
               <div className="claim-amount-box"><span>Claim amount that can be claimed on your behalf</span><strong>{formatMoney(visibleClaimAmount)}</strong></div>
-              <div className="callout green compact-callout">This verified person cannot make an independent claim yet. Log into the parent or guardian account to claim the benefit on their behalf.</div>
+              <div className="callout green compact-callout">{guardianClaimPending ? 'A parent / guardian must accept the identified connection in Connect before they can record this benefit.' : 'This profile uses the parent / guardian claim pathway. Log into the accepted parent / guardian account to record the benefit on this profile’s behalf.'}</div>
             </> : <>
               <label>Who is this claim for?<select disabled={!verifiedForPrototype} value={claimFor} onChange={(event) => setClaimFor(event.target.value)}><option disabled={!canSelfClaim} value="self">My own claim</option><option disabled={linkedDependents.length === 0} value="all-dependents">All my dependents</option>{linkedDependents.map((dependent) => <option key={dependent.id} value={`dependent:${dependent.id}`}>{dependent.username}</option>)}</select></label>
               {linkedDependents.length === 0 && <p className="muted">No children or dependents are linked to this guardian account yet. A child or dependent links to you from their own Connect account by entering your username as their parent / guardian account.</p>}
               <div className="claim-amount-box"><span>Claim amount for this selection</span><strong>{formatMoney(visibleClaimAmount)}</strong><small>{claimFor === 'all-dependents' ? `${linkedDependents.length} linked dependent${linkedDependents.length === 1 ? '' : 's'} × ${formatMoney(claimAmount)}` : claimFor.startsWith('dependent:') ? selectedDependent?.username ?? 'Linked dependent' : 'My own claim'}</small></div>
-              <div className="claim-action-buttons"><button className="primary" disabled={!verifiedForPrototype || visibleClaimAmount <= 0 || claimTargets.length === 0} type="button" onClick={() => setShowClaimModal(true)}>Make a claim</button><button className="secondary" disabled={!verifiedForPrototype || visibleClaimAmount <= 0 || claimTargets.length === 0} type="button" onClick={() => setShowRecycleModal(true)}>Recycle contribution</button></div>
+              <div className="claim-action-buttons"><button className="primary" disabled={!verifiedForPrototype || visibleClaimAmount <= 0 || claimTargets.length === 0} type="button" onClick={() => setShowClaimModal(true)}>Make a claim</button><button className="secondary recycle-benefit-button" disabled={!verifiedForPrototype || visibleClaimAmount <= 0 || claimTargets.length === 0} type="button" onClick={openRecycleBenefit}>Recycle benefit</button></div>
             </>}
           </div>
         </div>
@@ -1219,49 +1626,37 @@ function ClaimScreen({ method, setMethod, setAgeBracket, claimPreview, claims, d
 
       <div className="card-grid three claim-summary-grid">
         <Metric label="Illustrative Humanity Fund" value={formatCompactMoney(funds.currentEndowment)} note="current fund value" />
-        <Metric label="Claim amount" value={formatMoney(visibleClaimAmount)} note={shouldUseGuardian ? 'claimable by guardian' : claimFor === 'all-dependents' ? `${linkedDependents.length} linked dependent${linkedDependents.length === 1 ? '' : 's'} × ${formatMoney(claimAmount)}` : 'quarterly estimate if 100,000 people participate'} />
-        <Metric label="Your prototype claims" value={formatMoney(totalClaimed)} note={`${visibleClaimRecords.length} saved claim record${visibleClaimRecords.length === 1 ? '' : 's'}`} />
+        <Metric label="Quarterly benefit estimate" value={formatMoney(visibleClaimAmount)} note={shouldUseGuardian ? 'recorded by parent / guardian' : claimFor === 'all-dependents' ? `${linkedDependents.length} linked dependent${linkedDependents.length === 1 ? '' : 's'} × ${formatMoney(claimAmount)}` : `based on ${funds.activeClaimants.toLocaleString()} fictional people with profiles`} />
+        <Metric label="Your own prototype benefits" value={formatMoney(totalOwnBenefits)} note={`${ownBenefitRecords.length} benefit record${ownBenefitRecords.length === 1 ? '' : 's'} credited to your profile`} />
       </div>
+      <p className="claim-formula"><strong>Quarterly estimate:</strong> {formatMoney(funds.currentEndowment)} current illustrative value × {(funds.averageGrowth * 100).toFixed(0)}% modeled annual growth × 30% benefit allocation = {formatMoney(claimPreview.annualPool)} annual pool ({(claimPreview.payoutRate * 100).toFixed(0)}% of the current value), then ÷ {funds.activeClaimants.toLocaleString()} people with profiles ÷ 4 quarters.</p>
+      {loggedInUser && <div className="card-grid three claim-summary-grid"><Metric label="Benefits recorded for dependents" value={formatMoney(totalDependentBenefits)} note={`${dependentBenefitRecords.length} benefit record${dependentBenefitRecords.length === 1 ? '' : 's'} credited to dependent profiles`} /><Metric label="All benefits you recorded" value={formatMoney(totalBenefitsRecordedByUser)} note="your own benefit choices plus benefits you recorded for dependents" /><Metric label="All prototype benefit choices" value={formatMoney(totalClaimedAcrossProfiles + totalRecycledAcrossProfiles)} note={`${formatMoney(totalClaimedAcrossProfiles)} claimed · ${formatMoney(totalRecycledAcrossProfiles)} recycled`} /></div>}
       {claimMessage && <div className="callout green compact-callout">{claimMessage}</div>}
-      {loggedInUser && visibleClaimRecords.length > 0 && <div className="soft-card contribution-ledger"><h3>{selectedClaimLedgerUsers.length === 1 && selectedClaimLedgerUsers[0].id !== loggedInUser.id ? `${selectedClaimLedgerUsers[0].username}'s simulated claim ledger` : selectedClaimLedgerUsers.length > 1 ? 'Selected dependents’ simulated claim ledger' : 'Your simulated claim ledger'}</h3><div className="ledger-scroll">{visibleClaimRecords.map((entry) => <div className="ledger-row" key={entry.id}><strong>{formatMoney(entry.amount)}</strong><span>Claimed · {entry.targetName ?? 'Claim target'} · {new Date(entry.createdAt ?? Date.now()).toLocaleDateString()}</span><small>{entry.deliveryMethod ?? 'Prototype record'}{entry.denomination ? ` · ${entry.denomination}` : ''}</small></div>)}</div></div>}
+      {loggedInUser && ownBenefitRecords.length > 0 && <div className="soft-card contribution-ledger"><h3>Your simulated benefit ledger</h3><p className="muted">Only benefits credited to your own profile appear here. A parent / guardian can record one on your behalf while it remains credited to you.</p><div className="ledger-scroll">{ownBenefitRecords.map((entry) => <div className="ledger-row" key={entry.id}><strong>{formatMoney(entry.amount)}</strong><span>{getClaimLedgerDescription(entry, loggedInUser, users)} · {new Date(entry.createdAt ?? Date.now()).toLocaleDateString()}</span><small>{entry.deliveryMethod ?? 'Prototype record'}{entry.denomination ? ` · ${entry.denomination}` : ''}</small></div>)}</div></div>}
+      {loggedInUser && dependentBenefitGroups.length > 0 && <div className="soft-card dependent-benefit-ledger"><h3>Simulated benefit records for your dependents</h3><p className="muted">These benefits stay in each dependent’s ledger and total; you are shown as the parent / guardian who recorded them.</p><div className="dependent-benefit-groups">{dependentBenefitGroups.map(({ dependent, records }) => <div className="dependent-benefit-group" key={dependent.id}><h4>{dependent.username}</h4>{records.map((entry) => <div className="ledger-row" key={entry.id}><strong>{formatMoney(entry.amount)}</strong><span>{getClaimLedgerDescription(entry, loggedInUser, users)} · {new Date(entry.createdAt ?? Date.now()).toLocaleDateString()}</span><small>{entry.deliveryMethod ?? 'Prototype record'}{entry.denomination ? ` · ${entry.denomination}` : ''}</small></div>)}</div>)}</div></div>}
 
-      <div className="callout green">Children 0–15 and guardian-supported dependents are claimed through a parent / guardian account, but each represented person must still pass their own identity proof so the system cannot be gamed.</div>
+      <div className="callout green">The claim pathway is automatic: it shows <strong>Claim for yourself</strong> when no active parent / guardian connection is identified, or <strong>Parent / guardian must claim</strong> when one is identified. This is a simulated access route, not an age or identity finding.</div>
       <div className="nav-actions"><button className="secondary continue-cta" type="button" onClick={onBack}>← Back to Contribute</button><NextStep onClick={onNext}>Proceed to Compound</NextStep></div>
 
       {showVerificationModal && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Human verification details">
         <div className="modal-card claim-modal">
           <button className="modal-close" type="button" onClick={() => setShowVerificationModal(false)}>×</button>
-          <h3>{methodLabel}</h3>
-          <p>This is the one-time human verification step before claiming. This prototype keeps the fields visible but does not upload, store, or process any real proof.</p>
-          {effectiveMethod === 'government-id-liveness' ? <div className="form-grid">
-            <label>Photo ID type<select defaultValue=""><option value="">Select ID type</option><option>Passport</option><option>Driver's licence</option><option>Government identity card</option><option>Child or dependent identity document</option></select></label>
-            <label>Photo ID upload<input type="file" disabled /></label>
-            <label>Selfie / liveness check<input type="file" disabled /></label>
-          </div> : effectiveMethod === 'world-id' ? <div className="form-grid">
-            <label>World ID account<input placeholder="World ID account or proof reference" /></label>
-            <label>World ID verification code<input placeholder="One-time verification code" /></label>
-          </div> : <div className="form-grid"><label>Other verification partner<input placeholder="Future proof-of-human provider" /></label><label>Verification reference<input placeholder="Reference or token" /></label></div>}
-          <div className="form-grid compact">
-            <label>Verified age / status<select value={verifiedStatus} onChange={(event) => { const next = event.target.value as '16_plus' | '0_15' | 'dependent'; setVerifiedStatus(next); setAgeBracket(next === '16_plus' ? '18_plus' : 'under_16') }}><option value="16_plus">16+ / can claim for myself</option><option value="0_15">0–15 / parent or guardian must claim</option><option value="dependent">Dependent / guardian-supported claim</option></select></label>
-            <label>Email for two-step verification<input value={twoStepEmail} onChange={(event) => setTwoStepEmail(event.target.value)} placeholder="name@example.com" type="email" /></label>
-            <label>Phone for two-step verification<input value={twoStepPhone} onChange={(event) => setTwoStepPhone(event.target.value)} placeholder="Optional phone number" type="tel" /></label>
-            {verifiedStatus !== '16_plus' && <div className="guardian-picker modal-guardian-picker">
-              <h4>Parent / guardian account</h4>
-              <p className="muted">Search by name, country, and age group, then confirm the guardian account that can claim on this person’s behalf.</p>
-              <div className="form-grid compact connector-filter-grid">
-                <label>Filter by country<select value={guardianCountry} onChange={(event) => setGuardianCountry(event.target.value)}><option value="">Any country</option>{countryOptions.map((country) => <option key={country}>{country}</option>)}</select></label>
-                <label>Filter by age group<select value={guardianAgeGroup} onChange={(event) => setGuardianAgeGroup(event.target.value)}><option value="">Any age group</option>{ageBrackets.map((age) => <option key={age}>{age}</option>)}</select></label>
-              </div>
-              <label>Search guardian name<input value={guardianSearch} onChange={(event) => setGuardianSearch(event.target.value)} placeholder="Start typing guardian name" type="search" /></label>
-              {hasGuardianFilters && <div className="result-list compact-results">{guardianMatches.length > 0 ? guardianMatches.map((user) => <button key={user.id} type="button" onClick={() => selectGuardianForVerification(user)}>{user.username}<small>{user.country} · {user.ageGroup}</small></button>) : <p className="muted">No guardian accounts match those filters yet.</p>}</div>}
-              {guardianAccount && <div className="callout green selected-connector"><span>Confirmed parent / guardian: <strong>{guardianAccount}</strong></span><button className="secondary" type="button" onClick={() => { setGuardianAccount(''); setGuardianSearch('') }}>Clear guardian</button></div>}
-            </div>}
-          </div>
-          <div className="payment-summary"><strong>Verified-human status {verifiedForPrototype ? 'is connected to this account' : 'will connect to this account'}</strong><span>{methodLabel}</span><span>{verifiedStatus === '16_plus' ? 'Own claim enabled after verification.' : 'Guardian claim required after verification.'}</span></div>
-          <button className="primary" type="button" onClick={() => { void saveVerificationDraft() }}>{verifiedForPrototype ? 'Save updated verification' : 'Save prototype verification draft'}</button>
-          <div className="card-grid two verification-privacy-grid">
-            <div className="soft-card"><h3>Claim verification and claim record</h3><ul>{verificationDraft.retainedClaims.map((claim) => <li key={claim}>{claim}</li>)}</ul></div>
-            <div className="soft-card danger-soft"><h3>Protected and not retained directly by Equity for Humanity</h3><ul>{verificationDraft.prohibitedData.map((item) => <li key={item}>{item}</li>)}</ul></div>
+          <h3>{methodLabel} simulated verification</h3>
+          <p>These illustrative fields remain visible for the future flow, but are locked in this prototype. Do not enter identity, contact, proof, or account details.</p>
+          <fieldset className="claim-verification-details" disabled={verificationDetailsAreDisabled}>
+            {effectiveMethod === 'government-id-liveness' ? <div className="form-grid">
+              <label>Photo ID type<select defaultValue=""><option value="">Select ID type</option><option>Passport</option><option>Driver's licence</option><option>Government identity card</option><option>Child or dependent identity document</option></select></label>
+              <label>Photo ID upload<input type="file" /></label>
+              <label>Selfie / liveness check<input type="file" /></label>
+            </div> : effectiveMethod === 'world-id' ? <div className="form-grid">
+              <label>World ID account<input placeholder="World ID account or proof reference" /></label>
+              <label>World ID verification code<input placeholder="One-time verification code" /></label>
+            </div> : <div className="form-grid"><label>Other verification partner<input placeholder="Future proof-of-human provider" /></label><label>Verification reference<input placeholder="Reference or token" /></label></div>}
+          </fieldset>
+          <div className="payment-summary"><strong>Claim pathway</strong><span>{claimPathway === 'claim-for-self' ? 'Claim for yourself' : 'Parent / guardian must claim'}</span><span>{claimPathway === 'claim-for-self' ? 'No active parent / guardian connection identified.' : guardianClaimPending ? 'Connection acceptance is still pending.' : `Accepted parent / guardian: ${acceptedParentGuardianConnections.map((connection) => connection.guardianUsername || 'Selected account').join(', ')}`}</span></div>
+          <button className="primary" type="button" onClick={() => { void saveVerificationDraft() }}>Save Prototype Verification Draft</button>
+          <div className="verification-privacy-grid">
+            <div className="soft-card danger-soft"><h3>Protected and not retained directly by Equity for Humanity</h3><ul>{protectedPrototypeVerificationData.map((item) => <li key={item}>{item}</li>)}</ul></div>
           </div>
         </div>
       </div>}
@@ -1280,49 +1675,107 @@ function ClaimScreen({ method, setMethod, setAgeBracket, claimPreview, claims, d
             </div>
             <button className="primary" type="button" onClick={() => setClaimDeliveryStep('details')}>Next: receiving details</button>
           </> : <>
-            <div className="form-grid">
-              <label>{claimMethodFields[0]}<input value={claimContact} onChange={(event) => setClaimContact(event.target.value)} placeholder={claimMethod === 'Crypto wallet' ? 'Wallet address' : 'Receiving contact or institution'} /></label>
-              <label>{claimMethodFields[1]}<input value={claimAccount} onChange={(event) => setClaimAccount(event.target.value)} placeholder="Prototype detail" /></label>
-            </div>
+            <p className="muted">The receiving-detail fields remain visible for the future flow but are locked. Do not enter card, account, wallet, contact, or payment-reference details.</p>
+            <fieldset className="claim-delivery-details" disabled={claimDeliveryDetailsAreDisabled}>
+              <div className="form-grid">
+                <label>{claimMethodFields[0]}<input placeholder={claimMethod === 'Crypto wallet' ? 'Wallet address' : 'Receiving contact or institution'} /></label>
+                <label>{claimMethodFields[1]}<input placeholder="Prototype detail" /></label>
+              </div>
+            </fieldset>
             <div className="nav-actions"><button className="secondary" type="button" onClick={() => setClaimDeliveryStep('choose')}>← Back</button><button className="primary" type="button" onClick={() => { void savePrototypeClaim() }}>Make claim</button></div>
           </>}
         </div>
       </div>}
 
-      {showRecycleModal && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Recycle claim confirmation">
+      {showRecycleModal && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Recycle benefit confirmation">
         <div className="modal-card claim-modal">
           <button className="modal-close" type="button" onClick={() => setShowRecycleModal(false)}>×</button>
-          <h3>Recycle this claim?</h3>
-          <p>This records the benefit as recycled instead of received. Confirming creates matching contribution ledger entr{claimTargets.length === 1 ? 'y' : 'ies'} for the selected person{claimTargets.length === 1 ? '' : 's'}.</p>
-          <label>Where should this recycled claim go?<select value={recycleAllocationMode} onChange={(event) => setRecycleAllocationMode(event.target.value as AllocationMode)}>{allocationOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
-          <label className="checkbox-line"><input checked={recycleAnonymously} onChange={(event) => setRecycleAnonymously(event.target.checked)} type="checkbox" /> Recycle this claim anonymously</label>
-          <div className="payment-summary"><strong>{formatMoney(visibleClaimAmount)}</strong><span>{claimTargets.map((target) => target.username).join(', ')}</span><span>{allocationOptions.find((option) => option.id === recycleAllocationMode)?.label ?? 'Humanity Fund'} credit{recycleAnonymously ? ' · anonymous recognition' : ''}</span></div>
-          <div className="nav-actions"><button className="secondary" type="button" onClick={() => setShowRecycleModal(false)}>Cancel</button><button className="primary" type="button" onClick={() => { void recyclePrototypeClaim() }}>Confirm recycle</button></div>
+          <h3>Recycle this benefit?</h3>
+          <p>This records the selected benefit as recycled instead of received. The benefit source remains with the person who claimed it; the recipient below receives the matching contribution credit.</p>
+          <label>Recycle this benefit for?<select value={recycleFor} onChange={(event) => selectRecycleRecipient(event.target.value)}><option value="self">Myself</option><option disabled={linkedDependents.length === 0} value="all-dependents">All my dependents</option>{linkedDependents.map((dependent) => <option key={dependent.id} value={`dependent:${dependent.id}`}>{dependent.username}</option>)}<option value="other-person-or-group">On behalf of another person or group</option></select></label>
+          {recycleFor === 'other-person-or-group' && <div className="selected-benefit-recipient"><strong>Benefit recipient</strong><span>{recycleRecipientLabel}</span><button className="secondary" type="button" onClick={() => setShowRecycleRecipientModal(true)}>{recycleRecipientProfile ? 'Change person or group' : 'Choose person or group'}</button></div>}
+          <label>Where should this recycled benefit go?<select value={recycleAllocationMode} onChange={(event) => setRecycleAllocationMode(event.target.value as AllocationMode)}>{allocationOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
+          <label className="checkbox-line"><input checked={recycleAnonymously} onChange={(event) => setRecycleAnonymously(event.target.checked)} type="checkbox" /> Recycle this benefit anonymously</label>
+          <div className="payment-summary"><strong>{formatMoney(visibleClaimAmount)}</strong><span>Benefit source: {claimTargets.map((target) => target.username).join(', ')}</span><span>Contribution credit: {recycleRecipientLabel} · {allocationOptions.find((option) => option.id === recycleAllocationMode)?.label ?? 'Humanity Fund'}{recycleAnonymously ? ' · anonymous recognition' : ''}</span></div>
+          <div className="nav-actions"><button className="secondary" type="button" onClick={() => setShowRecycleModal(false)}>Cancel</button><button className="primary" disabled={recycleDestinations.length === 0} type="button" onClick={() => { void recyclePrototypeClaim() }}>Confirm recycle benefit</button></div>
         </div>
       </div>}
+      {showRecycleRecipientModal && <BenefitRecipientModal activeProfile={recycleRecipientProfile} onClear={() => setRecycleRecipientProfile(null)} onClose={() => setShowRecycleRecipientModal(false)} onSelect={(profile) => { setRecycleRecipientProfile(profile); setShowRecycleRecipientModal(false) }} profiles={profiles} />}
     </div>
   )
 }
 
+function BenefitRecipientModal({ activeProfile, onClear, onClose, onSelect, profiles }: { activeProfile: Profile | null; onClear: () => void; onClose: () => void; onSelect: (profile: Profile) => void; profiles: Profile[] }) {
+  const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [countryFilter, setCountryFilter] = useState('all')
+  const [draftProfile, setDraftProfile] = useState<Profile | null>(activeProfile)
+  const profileTypes = Array.from(new Set(profiles.map((profile) => profile.type).filter(Boolean))).sort()
+  const profileCountries = Array.from(new Set(profiles.map((profile) => profile.country).filter(Boolean))).sort()
+  const matchingProfiles = profiles.filter((profile) => {
+    const query = search.trim().toLocaleLowerCase()
+    const matchesSearch = !query || [profile.name, profile.type, profile.country, profile.description].some((value) => value.toLocaleLowerCase().includes(query))
+    return matchesSearch && (typeFilter === 'all' || profile.type === typeFilter) && (countryFilter === 'all' || profile.country === countryFilter)
+  })
 
-function getPersonalContributions(contributions: Contribution[], user: User | null) {
-  if (!user) return []
-  return contributions.filter((item) => item.contributorUserId === user.id || item.profileId === user.profileId || item.recognitionName === user.username)
+  useEffect(() => {
+    setDraftProfile(activeProfile)
+  }, [activeProfile])
+
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Choose benefit recipient">
+    <div className="modal-card contribution-profile-modal">
+      <button className="modal-close" type="button" onClick={onClose}>×</button>
+      <p className="eyebrow">Recycle benefit</p>
+      <h3>Choose who should receive contribution credit</h3>
+      <p className="muted">Use the same person or group recognition concept as a contribution. Selection stays staged until you confirm it below.</p>
+      <div className="form-grid compact">
+        <label>Search people and groups<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search a person, group, country, or description" /></label>
+        <label>Profile type<select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="all">All profile types</option>{profileTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+        <label>Country<select value={countryFilter} onChange={(event) => setCountryFilter(event.target.value)}><option value="all">All countries</option>{profileCountries.map((country) => <option key={country} value={country}>{country}</option>)}</select></label>
+      </div>
+      <div className="contribution-profile-results" aria-label="Benefit recipient search results">
+        {matchingProfiles.length > 0 ? matchingProfiles.map((profile) => <button className={`contribution-profile-result ${draftProfile?.id === profile.id ? 'selected' : ''}`} key={profile.id} type="button" onClick={() => setDraftProfile(profile)}><strong>{profile.name}</strong><span>{profile.type} · {profile.country} · {profile.ageGroup}</span><small>{profile.description}</small></button>) : <p className="muted">No existing profile matches. Choose or create a profile from Contribution before recycling a benefit for it.</p>}
+      </div>
+      <div className="selected-contribution-profile" aria-label="Selected benefit recipient confirmation" tabIndex={-1}>
+        {draftProfile ? <><strong>{draftProfile.name}</strong><span>{draftProfile.type} · {draftProfile.country}</span><div className="nav-actions"><button className="primary" type="button" onClick={() => onSelect(draftProfile)}>Confirm this benefit recipient</button><button className="secondary" type="button" onClick={() => { setDraftProfile(null); onClear() }}>Clear this benefit recipient</button></div></> : <span>Select a person or group above, then confirm the staged benefit recipient here.</span>}
+      </div>
+    </div>
+  </div>
 }
 
-function getContributionDisplayName(entry: Contribution, loggedInUser: User | null) {
-  if (entry.isAnonymous) return `${entry.anonymousAlias ?? 'Anonymous'}${loggedInUser && entry.contributorUserId === loggedInUser.id ? ' (you)' : ''}`
-  return entry.recognitionName
+function getClaimLedgerDescription(entry: ClaimRecord, loggedInUser: User | null, users: User[]) {
+  const actor = entry.actorUserId ? users.find((user) => user.id === entry.actorUserId) : null
+  const target = entry.targetName ?? 'this profile'
+  const action = entry.action === 'recycled' ? 'Recycled benefit' : 'Claimed benefit'
+  if (entry.actorUserId && entry.actorUserId === loggedInUser?.id) return `${action} recorded by you for ${target}`
+  if (actor) return `${action} recorded by ${actor.username} for ${target}`
+  return `${action} for ${target}`
+}
+
+
+function getSelfContributions(contributions: Contribution[], user: User | null) {
+  if (!user) return []
+  return calculateContributionAccounting(contributions, user.id, user.profileId ?? '').selfContributions
+}
+
+function getRecognitionRecipientDisplayName(entry: Contribution, profiles: Profile[]) {
+  return profiles.find((profile) => profile.id === entry.profileId)?.name ?? entry.recognitionName
 }
 
 function getContributionLedgerDescription(entry: Contribution, loggedInUser: User | null) {
   const alias = entry.anonymousAlias ?? 'Anonymous'
-  const isOwnAlias = Boolean(loggedInUser && entry.contributorUserId === loggedInUser.id)
-  const ownPrefix = isOwnAlias ? 'You' : entry.recognitionName
-  if (entry.isAnonymous && entry.sourceClaimId) return `${ownPrefix} recycled this claim anonymously under ${alias}`
-  if (entry.isAnonymous) return `${ownPrefix} contributed anonymously under ${alias}`
-  if (entry.sourceClaimId) return `${entry.recognitionName}'s recycled benefit`
-  return entry.paymentMethod ?? 'Simulated contribution'
+  const isValueSource = Boolean(loggedInUser && entry.contributorUserId === loggedInUser.id)
+  const isRecordedByUser = Boolean(loggedInUser && entry.actorUserId === loggedInUser.id)
+  const isOnBehalfOfAnother = Boolean((isValueSource || isRecordedByUser) && entry.profileId && entry.profileId !== loggedInUser?.profileId)
+  const onBehalfText = isOnBehalfOfAnother ? ` on behalf of ${entry.recognitionName}` : ''
+  const ownPrefix = isValueSource || isRecordedByUser ? 'You' : entry.recognitionName
+  const benefitSource = entry.contributedByName ?? 'the represented participant'
+  if (entry.sourceClaimId && isRecordedByUser && !isValueSource) return entry.isAnonymous ? `You recycled ${benefitSource}'s benefit anonymously under ${alias}${onBehalfText}` : `You recycled ${benefitSource}'s benefit${onBehalfText}`
+  if (entry.sourceClaimId && isValueSource && entry.actorUserId && entry.actorUserId !== loggedInUser?.id) return entry.isAnonymous ? `A parent / guardian recycled your benefit anonymously under ${alias}${onBehalfText}` : `A parent / guardian recycled your benefit${onBehalfText}`
+  if (entry.isAnonymous && entry.sourceClaimId) return `${ownPrefix} recycled this benefit anonymously under ${alias}${onBehalfText}`
+  if (entry.isAnonymous) return `${ownPrefix} contributed anonymously under ${alias}${onBehalfText}`
+  if (entry.sourceClaimId) return isValueSource ? `You recycled this benefit${onBehalfText}` : `${entry.recognitionName}'s recycled benefit`
+  return `${entry.paymentMethod ?? 'Simulated contribution'}${onBehalfText}`
 }
 
 function getContributionCircle(total: number) {
@@ -1387,21 +1840,27 @@ function CompoundScreen({ averageGrowth, setAverageGrowth, onBack, onNext, onRef
   const [selectedProjectionYear, setSelectedProjectionYear] = useState(30)
   const [rippleAnimationNonce, setRippleAnimationNonce] = useState(0)
   const [rippleStepIndex, setRippleStepIndex] = useState(0)
-  const personalContributions = getPersonalContributions(contributions, loggedInUser)
+  const contributionAccounting = loggedInUser ? calculateContributionAccounting(contributions, loggedInUser.id, loggedInUser.profileId ?? '') : null
+  const personalContributions = contributionAccounting?.selfFundContributions ?? []
+  const onBehalfContributions = contributionAccounting?.onBehalfContributions ?? []
   const personalClaims = getPersonalClaims(claims, loggedInUser)
   const totalClaimedSoFar = personalClaims.reduce((total, claim) => total + claim.amount, 0)
   const ownContributionTotal = personalContributions.reduce((total, item) => total + item.amount, 0)
   const stewardshipTotal = personalContributions.reduce((total, item) => total + item.stewardshipReserve, 0)
+  const onBehalfPrincipal = onBehalfContributions.reduce((total, item) => total + item.amount, 0)
   const safeGrowth = Math.max(1, Math.round(averageGrowth))
   const annualGrowthRate = safeGrowth / 100
   const vtAnnualGrowthRate = VT_FIVE_YEAR_AVERAGE_GROWTH / 100
   const now = Date.now()
-  const currentContributionValue = personalContributions.reduce((total, item) => {
+  const grownValueFromDates = (entries: Contribution[]) => entries.reduce((total, item) => {
     const contributedAt = item.createdAt ? new Date(item.createdAt).getTime() : now
     const yearsSoFar = Math.max(0, (now - contributedAt) / (365.25 * 24 * 60 * 60 * 1000))
     return total + item.amount * (1 + vtAnnualGrowthRate) ** yearsSoFar
   }, 0)
+  const currentContributionValue = grownValueFromDates(personalContributions)
   const grownSoFar = Math.max(0, currentContributionValue - ownContributionTotal)
+  const onBehalfCurrentValue = grownValueFromDates(onBehalfContributions)
+  const onBehalfGrownSoFar = Math.max(0, onBehalfCurrentValue - onBehalfPrincipal)
   const currentClaimPotentialForOthers = Math.max(0, grownSoFar * 0.3)
   const peopleReachedSoFar = Math.floor(currentClaimPotentialForOthers / MINIMUM_CLAIM_DOLLARS)
   const projectedYears = projectionYears.map((year) => {
@@ -1473,6 +1932,15 @@ function CompoundScreen({ averageGrowth, setAverageGrowth, onBack, onNext, onRef
             <Metric label="People reached so far" value={peopleReachedSoFar.toLocaleString()} note={`based on claim potential and a ${formatMoney(MINIMUM_CLAIM_DOLLARS)} minimum claim offer`} />
           </div>
         </div>
+        <div className="soft-card compound-current-growth-card">
+          <h3>Contributions you recorded on behalf of others</h3>
+          <div className="card-grid three compact-metrics current-growth-primary">
+            <Metric label="Total recorded on behalf of others" value={formatMoney(onBehalfPrincipal)} note={loggedInUser ? `${onBehalfContributions.length} recorded amount${onBehalfContributions.length === 1 ? '' : 's'}` : 'log in to see amounts you recorded for others'} />
+            <Metric label="Growth so far" value={formatMoney(onBehalfGrownSoFar)} note={`from saved dates using the ${VT_FIVE_YEAR_AVERAGE_GROWTH}% benchmark`} />
+            <Metric label="Total current amount" value={formatMoney(onBehalfCurrentValue)} note="principal plus estimated growth so far" />
+          </div>
+          <p className="muted small-note">This is your own view of work you recorded for others. Recognition belongs to them.</p>
+        </div>
         <div className="soft-card compound-control-card">
           <h3>Projected growth of your contributions</h3>
           <label className="growth-rate-label">
@@ -1539,9 +2007,11 @@ function RecognitionScreen({ funds, countries, ageRows, claims, contributions, l
   const [connectorReplayIndex, setConnectorReplayIndex] = useState(0)
   const [contributionReplayNonce, setContributionReplayNonce] = useState(0)
   const [connectorReplayNonce, setConnectorReplayNonce] = useState(0)
-  const personalContributions = getPersonalContributions(contributions, loggedInUser)
+  const personalContributions = getSelfContributions(contributions, loggedInUser)
   const personalContributionTotal = personalContributions.reduce((total, item) => total + item.amount, 0)
-  const personalCircle = getContributionCircle(personalContributionTotal)
+  const personalContributionAccounting = calculateContributionAccounting(contributions, loggedInUser?.id ?? '', loggedInUser?.profileId ?? '')
+  const totalCreditedToProfile = personalContributionAccounting.creditedToProfileTotal
+  const personalCircle = getContributionCircle(totalCreditedToProfile)
   const personalCircleIndex = contributionCircleLevels.findIndex((level) => level.name === personalCircle.name)
   useEffect(() => {
     setContributionReplayIndex(Math.max(0, personalCircleIndex))
@@ -1570,10 +2040,11 @@ function RecognitionScreen({ funds, countries, ageRows, claims, contributions, l
   }, [connectorReplayNonce, connectorCircleIndex])
   const replayConnectorCircle = connectorRippleCircleLevels[Math.min(connectorReplayIndex, Math.max(0, connectorCircleIndex))] ?? personalConnectorCircle
   const claimedAmount = claims.filter((claim) => claim.action === 'claimed').reduce((total, claim) => total + claim.amount, 0)
+  const recycledAmount = claims.filter((claim) => claim.action === 'recycled').reduce((total, claim) => total + claim.amount, 0)
   const claimPeople = new Set(claims.map((claim) => claim.userId || claim.profileId)).size
   const verifiedPeople = users.filter((user) => user.verifiedHumanAt).length
   const connectorsRecognized = users.filter((user) => user.connector).length
-  const totalGrowthSoFar = Math.max(0, funds.currentEndowment - funds.totalContributions)
+  const modeledGrowth = funds.modeledGrowth
   const stewardshipBreakdown = [
     { label: 'Long-term reserve', percent: 55, note: 'kept growing so stewardship can become self-sustaining' },
     { label: 'Operations and people support', percent: 15, note: 'lean staffing and participant care' },
@@ -1582,21 +2053,20 @@ function RecognitionScreen({ funds, countries, ageRows, claims, contributions, l
     { label: 'Governance, audit, and reporting', percent: 7, note: 'independent oversight and transparency' },
     { label: 'Platform and support tools', percent: 5, note: 'software, hosting, and participant support' },
   ]
-  const contributionTotalsByPerson = new Map<string, { key: string; label: string; amount: number; humanity: number; stewardship: number; country: string; ageGroup: string; profileType: string; contributorUserId?: string }>()
+  const contributionTotalsByRecognitionProfile = new Map<string, { key: string; label: string; amount: number; humanity: number; stewardship: number; country: string; ageGroup: string; profileType: string }>()
   contributions.forEach((entry) => {
-    const key = entry.isAnonymous ? entry.anonymousAlias ?? entry.id : entry.contributorUserId || entry.profileId || entry.recognitionName
-    const user = users.find((item) => item.id === entry.contributorUserId)
+    const key = entry.profileId || entry.recognitionName
     const profile = profiles.find((item) => item.id === entry.profileId)
-    const existing = contributionTotalsByPerson.get(key) ?? { key, label: getContributionDisplayName(entry, loggedInUser), amount: 0, humanity: 0, stewardship: 0, country: entry.country, ageGroup: entry.ageGroup, profileType: profile?.type ?? 'Individual', contributorUserId: entry.contributorUserId }
+    const existing = contributionTotalsByRecognitionProfile.get(key) ?? { key, label: getRecognitionRecipientDisplayName(entry, profiles), amount: 0, humanity: 0, stewardship: 0, country: profile?.country ?? entry.country, ageGroup: profile?.ageGroup ?? entry.ageGroup, profileType: profile?.type ?? 'Individual' }
     existing.amount += entry.amount
     existing.humanity += entry.humanityFund
     existing.stewardship += entry.stewardshipReserve
-    existing.country = user?.country ?? entry.country
-    existing.ageGroup = user?.ageGroup ?? entry.ageGroup
+    existing.country = profile?.country ?? entry.country
+    existing.ageGroup = profile?.ageGroup ?? entry.ageGroup
     existing.profileType = profile?.type ?? existing.profileType
-    contributionTotalsByPerson.set(key, existing)
+    contributionTotalsByRecognitionProfile.set(key, existing)
   })
-  const contributionRecognitions = [...contributionTotalsByPerson.values()].map((item) => ({ ...item, circle: getContributionCircle(item.amount) })).sort((a, b) => b.amount - a.amount)
+  const contributionRecognitions = [...contributionTotalsByRecognitionProfile.values()].map((item) => ({ ...item, circle: getContributionCircle(item.amount) })).sort((a, b) => b.amount - a.amount)
   const connectorRecognitions = users.map((user) => {
     const orders = getConnectorRippleOrders(user, users)
     const total = orders[orders.length - 1]?.runningTotal ?? 0
@@ -1628,17 +2098,17 @@ function RecognitionScreen({ funds, countries, ageRows, claims, contributions, l
     : filteredCountryRows
 
   return <div className="screen-content recognition-screen">
-    <SectionTitle eyebrow="Recognition" title="Recognize contribution and connector ripple.">Recognition thanks people for growing shared ownership and for helping the idea reach others. Anonymous contributors still count, without revealing their account.</SectionTitle>
+    <SectionTitle eyebrow="Recognition" title="Recognize contribution and connector ripple.">Contribution recognition is credited to the selected person or group. Anonymous contributors still count without revealing their account.</SectionTitle>
     <div className="card-grid two recognition-personal-grid aligned-recognition-cards">
       <div className="soft-card tree-card recognition-hero-card">
         <div className="recognition-card-heading"><h3>Your contribution circle</h3><button className="secondary mini-refresh" type="button" onClick={() => setContributionReplayNonce((nonce) => nonce + 1)}>Refresh circle</button></div>
-        <p className="muted">Thank you for reaching <strong>{personalCircle.name}</strong> through total contributions across the Humanity and Stewardship Funds.</p>
+        <p className="muted">Thank you for reaching <strong>{personalCircle.name}</strong> through total credit to your profile: your self-directed contributions plus contributions others made on your behalf.</p>
         <div key={`contribution-${contributionReplayIndex}`} className={`tree-visual growth-art-${replayContributionCircle.name.toLowerCase()}`} style={{ '--circle-color': replayContributionCircle.color, '--level-progress': `${Math.max(0, contributionCircleLevels.findIndex((level) => level.name === replayContributionCircle.name)) / (contributionCircleLevels.length - 1) * 100}%` } as React.CSSProperties}>
           <div className="growth-preview-scrim" />
           <div className="growth-fireworks" aria-hidden="true">{Array.from({ length: Math.max(1, contributionReplayIndex + 1) }, (_, index) => <span key={index} />)}</div>
           <div className="growth-preview-badge"><span style={{ background: replayContributionCircle.color }} /><strong>{replayContributionCircle.name}</strong></div>
         </div>
-        <Metric label="Recognized total" value={formatMoney(personalContributionTotal)} note={personalCircle.label} />
+        <Metric label="Total credited to your profile" value={formatMoney(totalCreditedToProfile)} note={`${personalCircle.label} · your own self-directed total is ${formatMoney(personalContributionTotal)}`} />
       </div>
       <div className="soft-card recognition-hero-card">
         <div className="recognition-card-heading"><h3>Your connector ripple circle</h3><button className="secondary mini-refresh" type="button" onClick={() => setConnectorReplayNonce((nonce) => nonce + 1)}>Refresh circle</button></div>
@@ -1653,13 +2123,13 @@ function RecognitionScreen({ funds, countries, ageRows, claims, contributions, l
     </div>
 
     <div className="recognition-metric-groups">
-      <div className="soft-card recognition-metric-group"><h3>Global contributions and fund growth</h3><p className="muted small-note">Money contributed, stewardship support, and growth in current fund value.</p><div className="card-grid three wide-metric-row"><Metric label="Humanity Fund contributions" value={formatCompactMoney(funds.humanityFundContributions)} /><Metric label="Stewardship contributions" value={formatCompactMoney(funds.stewardshipContributions)} /><Metric label="Total contributions" value={formatCompactMoney(funds.totalContributions)} /></div><div className="card-grid two wide-metric-row"><Metric label="Total growth so far" value={formatCompactMoney(totalGrowthSoFar)} /><Metric label="Current fund value" value={formatCompactMoney(funds.currentEndowment)} /></div></div>
-      <div className="soft-card recognition-metric-group"><h3>Claims</h3><p className="muted small-note">Benefits already claimed or recycled in the prototype record.</p><div className="card-grid three wide-metric-row"><Metric label="Total amount claimed" value={formatCompactMoney(claimedAmount)} /><Metric label="Claim records" value={claims.length.toLocaleString()} /><Metric label="People making claims" value={claimPeople.toLocaleString()} /></div></div>
-      <div className="soft-card recognition-metric-group"><h3>People connected and verified</h3><p className="muted small-note">The human network side of recognition.</p><div className="card-grid three wide-metric-row"><Metric label="People connected" value={users.length.toLocaleString()} /><Metric label="Verified people" value={verifiedPeople.toLocaleString()} /><Metric label="Connectors recognized" value={connectorsRecognized.toLocaleString()} /></div></div>
+      <div className="soft-card recognition-metric-group"><h3>Global contributions and fund growth</h3><p className="muted small-note">Only new simulated contributions are fund inflows. Recycled benefits remain traceable benefit-choice reallocations and do not add new fund money. The current illustrative fund value adds modeled growth and subtracts benefits recorded as received. Recycle to Stewardship moves value from Humanity to Stewardship without increasing the overall fund.</p><div className="card-grid three wide-metric-row"><Metric label="Humanity Fund contributions" value={formatCompactMoney(funds.humanityFundContributions)} /><Metric label="Stewardship contributions" value={formatCompactMoney(funds.stewardshipContributions)} /><Metric label="Total contributions" value={formatCompactMoney(funds.totalContributions)} /></div><div className="card-grid three wide-metric-row"><Metric label="Modeled growth" value={formatCompactMoney(modeledGrowth)} note={`${(funds.averageGrowth * 100).toFixed(0)}% illustrative annual growth`} /><Metric label="Benefits recorded as received" value={formatCompactMoney(funds.cumulativeParticipantBenefits)} note="subtracted from current value" /><Metric label="Current fund value" value={formatCompactMoney(funds.currentEndowment)} note="contributions + modeled growth − received benefits" /></div><div className="card-grid three wide-metric-row"><Metric label="Current Humanity Fund" value={formatCompactMoney(funds.humanityFundBalance ?? Math.max(0, funds.currentEndowment - (funds.stewardshipFundBalance ?? funds.stewardshipContributions)))} note="current value after recycled Stewardship transfers" /><Metric label="Current Stewardship Fund" value={formatCompactMoney(funds.stewardshipFundBalance ?? funds.stewardshipContributions)} note="inflows plus recycled Stewardship transfers" /><Metric label="Recycled into Stewardship" value={formatCompactMoney(funds.recycledStewardshipTransfers ?? 0)} note="moved from Humanity without new capital" /></div></div>
+      <div className="soft-card recognition-metric-group"><h3>Benefits</h3><p className="muted small-note">Claimed and recycled benefits remain separate so a recycled amount is not double-counted as a payment.</p><div className="card-grid four wide-metric-row"><Metric label="Benefits claimed" value={formatCompactMoney(claimedAmount)} /><Metric label="Benefits recycled" value={formatCompactMoney(recycledAmount)} /><Metric label="Benefit records" value={claims.length.toLocaleString()} /><Metric label="People with benefit records" value={claimPeople.toLocaleString()} /></div></div>
+      <div className="soft-card recognition-metric-group"><h3>People connected and verified</h3><p className="muted small-note">The human-profile side of recognition.</p><div className="card-grid three wide-metric-row"><Metric label="People with profiles" value={funds.activeClaimants.toLocaleString()} /><Metric label="Verified people" value={verifiedPeople.toLocaleString()} /><Metric label="Connectors recognized" value={connectorsRecognized.toLocaleString()} /></div></div>
     </div>
 
     <div className="card-grid two">
-      <div className="soft-card recognition-browser"><h3>Recognition of contribution circles</h3><p className="muted small-note">Shows only people currently in the selected circle level.</p><label>Circle level<select value={selectedContributionCircle} onChange={(event) => setSelectedContributionCircle(event.target.value)}>{[...contributionCircleLevels].reverse().map((level) => <option key={level.name}>{level.name}</option>)}</select></label><div className="recognition-list">{browseContributors.length > 0 ? browseContributors.map((item) => <span key={item.key}><b>{item.label}</b><small>{formatMoney(item.amount)} · {item.circle.name}</small></span>) : <p className="muted">No recognized contributors at this exact level yet.</p>}</div></div>
+      <div className="soft-card recognition-browser"><h3>Recognition profiles by contribution circle</h3><p className="muted small-note">Shows people and groups receiving recognition in the selected circle level.</p><label>Circle level<select value={selectedContributionCircle} onChange={(event) => setSelectedContributionCircle(event.target.value)}>{[...contributionCircleLevels].reverse().map((level) => <option key={level.name}>{level.name}</option>)}</select></label><div className="recognition-list">{browseContributors.length > 0 ? browseContributors.map((item) => <span key={item.key}><b>{item.label}</b><small>{formatMoney(item.amount)} · {item.circle.name}</small></span>) : <p className="muted">No recognition profiles are in this exact level yet.</p>}</div></div>
       <div className="soft-card recognition-browser"><h3>Recognition of connector ripple circles</h3><p className="muted small-note">Shows only people currently in the selected connector-ripple level.</p><label>Circle level<select value={selectedConnectorCircle} onChange={(event) => setSelectedConnectorCircle(event.target.value)}>{[...connectorRippleCircleLevels].reverse().map((level) => <option key={level.name}>{level.name}</option>)}</select></label><div className="recognition-list">{browseConnectors.length > 0 ? browseConnectors.map((item) => <span key={item.user.id}><b>{item.user.username}</b><small>{item.total.toLocaleString()} ripple · {item.circle.name}</small></span>) : <p className="muted">No connector ripples at this exact level yet.</p>}</div></div>
     </div>
 

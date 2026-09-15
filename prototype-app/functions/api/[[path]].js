@@ -1,6 +1,4 @@
-import { createClaims, createContribution, createProfile, createUser, loadSnapshot, loginUser, updateContributionProfile, updateUserProfile, updateUserVerification } from '../_shared/cloudflare-store.js'
-
-const sessions = new Map()
+import { createClaims, createContribution, createProfile, createSession, createUser, loadSnapshot, loginUser, removeGuardianConnection, requestGuardianConnection, resolveSession, respondGuardianConnection, updateContributionProfile, updateUserProfile, updateUserVerification } from '../_shared/cloudflare-store.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -18,44 +16,63 @@ export async function onRequest(context) {
 
     if (request.method === 'POST' && path === '/login') {
       const result = await loginUser(env, await readJson(request))
-      if (result.ok && result.user?.id) result.sessionToken = createSession(result.user.id)
+      if (result.ok && result.user?.id) result.sessionToken = await createSession(env, result.user.id)
       return json(request, env, result, result.ok ? 200 : 401)
     }
 
     if (request.method === 'POST' && path === '/users/profile') {
       const body = await readJson(request)
-      requireSameUser(request, body.id)
+      await requireSameUser(request, env, body.id)
       return json(request, env, await updateUserProfile(env, body))
+    }
+
+    if (request.method === 'POST' && path === '/guardian-connections/request') {
+      const body = await readJson(request)
+      const childUserId = await requireSession(request, env)
+      return json(request, env, await requestGuardianConnection(env, { childUserId, guardianUserId: body.guardianUserId }))
+    }
+
+    if (request.method === 'POST' && path === '/guardian-connections/respond') {
+      const body = await readJson(request)
+      const guardianUserId = await requireSession(request, env)
+      return json(request, env, await respondGuardianConnection(env, { guardianUserId, childUserId: body.childUserId, decision: body.decision }))
+    }
+
+    if (request.method === 'POST' && path === '/guardian-connections/remove') {
+      const body = await readJson(request)
+      const actorUserId = await requireSession(request, env)
+      return json(request, env, await removeGuardianConnection(env, { actorUserId, childUserId: body.childUserId, guardianUserId: body.guardianUserId }))
     }
 
     if (request.method === 'POST' && path === '/users/verification') {
       const body = await readJson(request)
-      requireSameUser(request, body.id)
-      return json(request, env, await updateUserVerification(env, body))
+      const userId = await requireSession(request, env)
+      return json(request, env, await updateUserVerification(env, { ...body, id: userId }))
     }
 
     if (request.method === 'POST' && path === '/profiles') {
       const body = await readJson(request)
-      if (body.createdByUserId) requireSameUser(request, body.createdByUserId)
-      else requireSession(request)
+      if (body.createdByUserId) await requireSameUser(request, env, body.createdByUserId)
+      else await requireSession(request, env)
       return json(request, env, await createProfile(env, body), 201)
     }
 
     if (request.method === 'POST' && path === '/profiles/update') {
       const body = await readJson(request)
-      requireSameUser(request, body.userId)
+      await requireSameUser(request, env, body.userId)
       return json(request, env, await updateContributionProfile(env, body))
     }
 
     if (request.method === 'POST' && path === '/contributions') {
-      requireSession(request)
-      return json(request, env, await createContribution(env, await readJson(request)), 201)
+      const contributorUserId = await requireSession(request, env)
+      const body = await readJson(request)
+      return json(request, env, await createContribution(env, { ...body, contributorUserId }), 201)
     }
 
     if (request.method === 'POST' && path === '/claims') {
+      const actorUserId = await requireSession(request, env)
       const body = await readJson(request)
-      requireSameUser(request, body.actorUserId)
-      return json(request, env, await createClaims(env, body), 201)
+      return json(request, env, await createClaims(env, { ...body, actorUserId }), 201)
     }
 
     return json(request, env, { error: 'Not found' }, 404)
@@ -65,21 +82,15 @@ export async function onRequest(context) {
   }
 }
 
-function createSession(userId) {
-  const token = crypto.randomUUID()
-  sessions.set(token, userId)
-  return token
-}
-
-function requireSession(request) {
+async function requireSession(request, env) {
   const token = request.headers.get('x-e4h-session-token') || ''
-  const userId = sessions.get(token)
+  const userId = await resolveSession(env, token)
   if (!userId) throw statusError('Please log in again before changing prototype data.', 401)
   return userId
 }
 
-function requireSameUser(request, bodyUserId) {
-  const sessionUserId = requireSession(request)
+async function requireSameUser(request, env, bodyUserId) {
+  const sessionUserId = await requireSession(request, env)
   if (sessionUserId !== bodyUserId) throw statusError('This session cannot change another account.', 403)
   return sessionUserId
 }

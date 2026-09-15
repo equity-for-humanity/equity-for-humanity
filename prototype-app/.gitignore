@@ -6,3 +6,7 @@ dist/
 !.env.example
 data/prototype-data.json
 npm-debug.log*
+._*
+
+# Local PNG evidence / screenshots — keep private
+artifacts/

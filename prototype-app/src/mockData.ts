@@ -1,16 +1,21 @@
 import type { AllocationMode } from './model'
 
 export const dashboardSample = {
-  totalContributions: 725_000_000,
-  humanityFundContributions: 711_800_000,
-  stewardshipContributions: 13_200_000,
-  currentEndowment: 812_400_000,
-  cumulativeParticipantBenefits: 18_600_000,
-  recycledBenefits: 7_450_000,
-  verifiedReach: 1_240_000,
-  connectorReach: 186_000,
+  totalContributions: 446_763,
+  humanityFundContributions: 398_203.84,
+  stewardshipContributions: 48_559.16,
+  currentEndowment: 486_428.38,
+  cumulativeParticipantBenefits: 155,
+  recycledBenefits: 80,
+  recycledStewardshipTransfers: 0,
+  humanityFundBalance: 437_869.22,
+  stewardshipFundBalance: 48_559.16,
+  totalRecordedBenefitChoices: 235,
+  modeledGrowth: 39_820.38,
+  verifiedReach: 0,
+  connectorReach: 26,
   averageGrowth: 0.1,
-  activeClaimants: 420_000,
+  activeClaimants: 108,
   recycleRate: 0.28,
 }
 
@@ -18,7 +23,7 @@ export const participantSample = {
   name: 'Prototype participant',
   status: 'Connected simulation',
   connector: 'LOCAL-GROVE-042',
-  nextBenefit: 42.5,
+  nextBenefit: 34.12,
   lifetimeClaimed: 120,
   lifetimeRecycled: 80,
   lifetimeContributedBack: 50,
@@ -76,25 +81,25 @@ export const connectorCircles = [
 ]
 
 export const countrySamples = [
-  { country: 'Canada', people: 86000, contributions: 24_600_000, connectors: 12400, claimants: 18400 },
-  { country: 'India', people: 310000, contributions: 42_200_000, connectors: 44200, claimants: 88200 },
-  { country: 'Nigeria', people: 128000, contributions: 11_800_000, connectors: 18700, claimants: 41600 },
-  { country: 'Brazil', people: 98000, contributions: 16_400_000, connectors: 15100, claimants: 29400 },
+  { country: 'Canada', people: 11, contributions: 43_787, connectors: 4, claimants: 2 },
+  { country: 'India', people: 9, contributions: 34_280, connectors: 2, claimants: 0 },
+  { country: 'Nigeria', people: 9, contributions: 32_896, connectors: 2, claimants: 0 },
+  { country: 'Brazil', people: 9, contributions: 35_664, connectors: 2, claimants: 0 },
 ]
 
 export const ageGroupSamples = [
-  ['Child 0–15', 94000],
-  ['Youth 16–20', 126000],
-  ['21–25', 144000],
-  ['26–35', 238000],
-  ['36–50', 284000],
-  ['51+', 354000],
+  ['0–5', 5],
+  ['6–10', 5],
+  ['11–15', 6],
+  ['16–20', 5],
+  ['21–25', 8],
+  ['26–30', 8],
 ]
 
 export const profileTypeSamples = [
-  ['Individuals', 820000],
-  ['Children / guardian-linked', 94000],
-  ['Faith groups', 3200],
-  ['Organizations', 1800],
-  ['In memory / in honour', 12600],
+  ['Individual', 108],
+  ['Child under 16', 1],
+  ['Faith group', 1],
+  ['Organization', 1],
+  ['In memory of', 1],
 ]

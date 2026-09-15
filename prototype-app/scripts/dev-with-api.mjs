@@ -27,5 +27,5 @@ function shutdown(code = 0) {
 process.on('SIGINT', () => shutdown(0))
 process.on('SIGTERM', () => shutdown(0))
 
-run('api', process.execPath, ['scripts/prototype-api.mjs'])
+run('api', process.execPath, ['--watch', 'scripts/prototype-api.mjs'])
 run('vite', process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '5177'])

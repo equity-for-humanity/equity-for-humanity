@@ -6,7 +6,7 @@ import * as jsonStore from './prototype-store.mjs'
 
 const { Pool } = pg
 const databaseUrl = process.env.DATABASE_URL
-const stateKey = process.env.E4H_POSTGRES_STATE_KEY || 'private-beta'
+const stateKey = process.env.E4H_POSTGRES_STATE_KEY || 'canonical-prototype'
 
 let pool
 
@@ -38,7 +38,10 @@ export function createSeedData() {
 export async function loadSnapshot() {
   await ensureTable()
   const result = await getPool().query('select snapshot from prototype_state where key = $1', [stateKey])
-  if (result.rows[0]?.snapshot) return result.rows[0].snapshot
+  if (result.rows[0]?.snapshot) {
+    const snapshot = result.rows[0].snapshot
+    return jsonStore.prepareSnapshotForRead(snapshot)
+  }
   const seed = createSeedData()
   await saveSnapshot(undefined, seed)
   return seed
@@ -46,6 +49,7 @@ export async function loadSnapshot() {
 
 export async function saveSnapshot(_unusedPath, snapshot) {
   await ensureTable()
+  jsonStore.prepareSnapshotForRead(snapshot)
   snapshot.updatedAt = new Date().toISOString()
   await getPool().query(
     `insert into prototype_state (key, snapshot, updated_at)
@@ -57,7 +61,7 @@ export async function saveSnapshot(_unusedPath, snapshot) {
 }
 
 async function runJsonStoreMutation(fnName, ...args) {
-  const dir = await mkdtemp(join(tmpdir(), 'efh-private-beta-'))
+  const dir = await mkdtemp(join(tmpdir(), 'e4h-canonical-prototype-'))
   const dataPath = join(dir, 'prototype-data.json')
   try {
     const snapshot = await loadSnapshot()
@@ -78,6 +82,18 @@ export const splitContribution = jsonStore.splitContribution
 
 export async function createUser(_unusedPath, input) {
   return runJsonStoreMutation('createUser', input)
+}
+
+export async function requestGuardianConnection(_unusedPath, input) {
+  return runJsonStoreMutation('requestGuardianConnection', input)
+}
+
+export async function respondGuardianConnection(_unusedPath, input) {
+  return runJsonStoreMutation('respondGuardianConnection', input)
+}
+
+export async function removeGuardianConnection(_unusedPath, input) {
+  return runJsonStoreMutation('removeGuardianConnection', input)
 }
 
 export async function loginUser(_unusedPath, input) {

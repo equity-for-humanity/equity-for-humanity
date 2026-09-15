@@ -2,7 +2,7 @@ import { createServer } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { createClaims, createContribution, createProfile, createUser, loginUser, loadSnapshot, updateContributionProfile, updateUserProfile, updateUserVerification } from './prototype-store-adapter.mjs'
+import { createClaims, createContribution, createProfile, createUser, loginUser, loadSnapshot, removeGuardianConnection, requestGuardianConnection, respondGuardianConnection, updateContributionProfile, updateUserProfile, updateUserVerification } from './prototype-store-adapter.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const defaultDataPath = join(__dirname, '..', 'data', 'prototype-data.json')
@@ -10,7 +10,6 @@ const dataPath = process.env.E4H_DATA_PATH || defaultDataPath
 const port = Number(process.env.E4H_API_PORT || process.env.PORT || 8787)
 const host = process.env.E4H_API_HOST || '127.0.0.1'
 const maxBodyBytes = Number(process.env.E4H_MAX_BODY_BYTES || 100_000)
-const betaAccessCode = String(process.env.E4H_BETA_ACCESS_CODE || '').trim()
 const allowedOrigins = (process.env.E4H_ALLOWED_ORIGINS || 'http://127.0.0.1:5177,http://localhost:5177')
   .split(',')
   .map((origin) => origin.trim())
@@ -32,7 +31,7 @@ function sendJson(request, response, status, body) {
   const headers = {
     'content-type': 'application/json',
     'access-control-allow-methods': 'GET,POST,OPTIONS',
-    'access-control-allow-headers': 'content-type,x-e4h-session-token,x-e4h-beta-code',
+    'access-control-allow-headers': 'content-type,x-e4h-session-token',
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'no-referrer',
     'cache-control': 'no-store',
@@ -106,16 +105,6 @@ function requireSameUser(request, bodyUserId) {
   return sessionUserId
 }
 
-function requireBetaAccess(request) {
-  if (!betaAccessCode) return
-  const submittedCode = String(request.headers['x-e4h-beta-code'] || '').trim()
-  if (submittedCode !== betaAccessCode) {
-    const error = new Error('Private beta access code is required.')
-    error.statusCode = 403
-    throw error
-  }
-}
-
 export function createPrototypeServer({ path = dataPath } = {}) {
   return createServer(async (request, response) => {
     try {
@@ -140,7 +129,6 @@ export function createPrototypeServer({ path = dataPath } = {}) {
       }
 
       if (request.method === 'POST' && url.pathname === '/api/users') {
-        requireBetaAccess(request)
         const body = await readJson(request)
         return sendJson(request, response, 201, await createUser(path, body))
       }
@@ -158,22 +146,40 @@ export function createPrototypeServer({ path = dataPath } = {}) {
         return sendJson(request, response, 200, await updateUserProfile(path, body))
       }
 
+      if (request.method === 'POST' && url.pathname === '/api/guardian-connections/request') {
+        const body = await readJson(request)
+        const childUserId = requireSession(request)
+        return sendJson(request, response, 200, await requestGuardianConnection(path, { childUserId, guardianUserId: body.guardianUserId }))
+      }
+
+      if (request.method === 'POST' && url.pathname === '/api/guardian-connections/respond') {
+        const body = await readJson(request)
+        const guardianUserId = requireSession(request)
+        return sendJson(request, response, 200, await respondGuardianConnection(path, { guardianUserId, childUserId: body.childUserId, decision: body.decision }))
+      }
+
+      if (request.method === 'POST' && url.pathname === '/api/guardian-connections/remove') {
+        const body = await readJson(request)
+        const actorUserId = requireSession(request)
+        return sendJson(request, response, 200, await removeGuardianConnection(path, { actorUserId, childUserId: body.childUserId, guardianUserId: body.guardianUserId }))
+      }
+
       if (request.method === 'POST' && url.pathname === '/api/users/verification') {
         const body = await readJson(request)
-        requireSameUser(request, body.id)
-        return sendJson(request, response, 200, await updateUserVerification(path, body))
+        const userId = requireSession(request)
+        return sendJson(request, response, 200, await updateUserVerification(path, { ...body, id: userId }))
       }
 
       if (request.method === 'POST' && url.pathname === '/api/contributions') {
         const body = await readJson(request)
-        requireSession(request)
-        return sendJson(request, response, 201, await createContribution(path, body))
+        const contributorUserId = requireSession(request)
+        return sendJson(request, response, 201, await createContribution(path, { ...body, contributorUserId }))
       }
 
       if (request.method === 'POST' && url.pathname === '/api/claims') {
         const body = await readJson(request)
-        requireSameUser(request, body.actorUserId)
-        return sendJson(request, response, 201, await createClaims(path, body))
+        const actorUserId = requireSession(request)
+        return sendJson(request, response, 201, await createClaims(path, { ...body, actorUserId }))
       }
 
       return sendJson(request, response, 404, { error: 'Not found' })

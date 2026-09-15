@@ -9,5 +9,5 @@ database_id = "5514dd2f-92e1-49d3-b710-403e583bf2de"
 
 [vars]
 VITE_E4H_PRIVATE_BETA = "true"
-E4H_ALLOWED_ORIGINS = "https://app.equityforhumanity.org"
+E4H_ALLOWED_ORIGINS = "https://app.equityforhumanity.org,https://equity-for-humanity-private-beta.pages.dev"
 # Set E4H_BETA_ACCESS_CODE as a Cloudflare Pages secret, not here.
