@@ -1,3 +1,10 @@
+# Cloudflare Pages private-beta app — not the GitHub Pages brochure.
+# Pushing this GitHub repo updates index.html / about.html only.
+# Do not `wrangler pages deploy` unless a hosted-beta update is explicitly approved.
+#
+# CORS lists the stable custom domain and stable pages.dev host only.
+# Hashed Pages preview URLs and Workers Playground origins are omitted
+# until that preview/playground policy is decided.
 name = "equity-for-humanity-private-beta"
 compatibility_date = "2026-07-08"
 pages_build_output_dir = "dist"
