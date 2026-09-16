@@ -36,4 +36,16 @@ describe('claim prototype safeguards and attribution UI', () => {
     expect(claimSource).toContain('Recycle this benefit for')
     expect(claimSource).toContain('On behalf of another person or group')
   })
+
+  it('summarizes benefits the signed-in user recorded by recipient, not all-prototype totals', () => {
+    expect(claimSource).toContain('calculateClaimAccounting')
+    expect(claimSource).toContain('Benefits you recorded for yourself')
+    expect(claimSource).toContain('Benefits you recorded for dependents')
+    expect(claimSource).toContain('Benefits you recorded for others')
+    expect(claimSource).toContain('claimed · ')
+    expect(claimSource).toContain('not all-prototype or fund-wide totals')
+    expect(claimSource).not.toContain('All prototype benefit choices')
+    expect(claimSource).not.toContain('totalClaimedAcrossProfiles')
+    expect(claimSource).not.toContain('totalRecycledAcrossProfiles')
+  })
 })

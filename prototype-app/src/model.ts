@@ -63,6 +63,10 @@ function totalContributionField(entries: ContributionAccountingEntry[], field: '
   return Math.round(entries.reduce((total, entry) => total + Math.max(0, Number(entry[field]) || 0), 0) * 100) / 100
 }
 
+function roundMoney(value: number) {
+  return Math.round(Math.max(0, value) * 100) / 100
+}
+
 export function calculateContributionAccounting<T extends ContributionAccountingEntry>(entries: T[], userId: string, profileId: string) {
   const recordedByUser = entries.filter((entry) => entry.contributorUserId === userId || entry.actorUserId === userId)
   const selfContributions = recordedByUser.filter((entry) => entry.profileId === profileId)
@@ -96,13 +100,107 @@ export function calculateContributionAccounting<T extends ContributionAccounting
   }
 }
 
+export type ClaimAccountingEntry = {
+  id?: string
+  amount: number
+  action: 'claimed' | 'recycled'
+  actorUserId?: string
+  userId?: string
+  profileId?: string
+}
+
+export type RecycledBenefitDestination = {
+  sourceClaimId?: string
+  profileId?: string
+}
+
+export type ClaimRecipientKind = 'yourself' | 'dependents' | 'others'
+
+function isClaimRecordedByUser(entry: ClaimAccountingEntry, userId: string) {
+  return entry.actorUserId === userId || (!entry.actorUserId && entry.userId === userId)
+}
+
+function claimRecipientKind(
+  entry: { userId?: string; profileId?: string },
+  userId: string,
+  profileId: string,
+  dependentUserIds: Set<string>,
+  dependentProfileIds: Set<string>,
+): ClaimRecipientKind {
+  if (entry.userId === userId || (profileId && entry.profileId === profileId)) return 'yourself'
+  if ((entry.userId && dependentUserIds.has(entry.userId)) || (entry.profileId && dependentProfileIds.has(entry.profileId))) return 'dependents'
+  return 'others'
+}
+
+function recipientKindFromProfileIds(
+  profileIds: string[],
+  userId: string,
+  profileId: string,
+  dependentUserIds: Set<string>,
+  dependentProfileIds: Set<string>,
+): ClaimRecipientKind {
+  const kinds = new Set(profileIds.map((targetProfileId) => (
+    claimRecipientKind({ profileId: targetProfileId }, userId, profileId, dependentUserIds, dependentProfileIds)
+  )))
+  if (kinds.has('others')) return 'others'
+  if (kinds.has('dependents')) return 'dependents'
+  return 'yourself'
+}
+
+function summarizeClaimRecords<T extends ClaimAccountingEntry>(entries: T[]) {
+  const claimed = entries.filter((entry) => entry.action === 'claimed')
+  const recycled = entries.filter((entry) => entry.action === 'recycled')
+  return {
+    records: entries,
+    claimedAmount: roundMoney(claimed.reduce((total, entry) => total + Math.max(0, Number(entry.amount) || 0), 0)),
+    recycledAmount: roundMoney(recycled.reduce((total, entry) => total + Math.max(0, Number(entry.amount) || 0), 0)),
+    totalAmount: roundMoney(entries.reduce((total, entry) => total + Math.max(0, Number(entry.amount) || 0), 0)),
+  }
+}
+
+export function calculateClaimAccounting<T extends ClaimAccountingEntry>(
+  claims: T[],
+  userId: string,
+  profileId: string,
+  dependents: Array<{ id: string; profileId?: string }> = [],
+  recycledDestinations: RecycledBenefitDestination[] = [],
+) {
+  const dependentUserIds = new Set(dependents.map((dependent) => dependent.id).filter(Boolean))
+  const dependentProfileIds = new Set(dependents.flatMap((dependent) => dependent.profileId ? [dependent.profileId] : []))
+  const destinationsByClaimId = recycledDestinations.reduce((destinations, destination) => {
+    const claimId = destination.sourceClaimId
+    if (!claimId) return destinations
+    const existing = destinations.get(claimId) ?? []
+    existing.push(destination)
+    destinations.set(claimId, existing)
+    return destinations
+  }, new Map<string, RecycledBenefitDestination[]>())
+  const recordedByUser = claims.filter((claim) => isClaimRecordedByUser(claim, userId))
+  const yourself: T[] = []
+  const dependentRecords: T[] = []
+  const others: T[] = []
+
+  for (const claim of recordedByUser) {
+    const linkedDestinations = claim.action === 'recycled' && claim.id ? destinationsByClaimId.get(claim.id) ?? [] : []
+    const kind = linkedDestinations.length > 0
+      ? recipientKindFromProfileIds(linkedDestinations.flatMap((destination) => destination.profileId ? [destination.profileId] : []), userId, profileId, dependentUserIds, dependentProfileIds)
+      : claimRecipientKind(claim, userId, profileId, dependentUserIds, dependentProfileIds)
+    if (kind === 'yourself') yourself.push(claim)
+    else if (kind === 'dependents') dependentRecords.push(claim)
+    else others.push(claim)
+  }
+
+  return {
+    recordedByUser,
+    yourself: summarizeClaimRecords(yourself),
+    dependents: summarizeClaimRecords(dependentRecords),
+    others: summarizeClaimRecords(others),
+  }
+}
+
 export type IllustrativeFundClaim = {
   action: 'claimed' | 'recycled'
   amount: number
-}
-
-function roundMoney(value: number) {
-  return Math.round(Math.max(0, value) * 100) / 100
 }
 
 export function calculateIllustrativeFundAccounting({

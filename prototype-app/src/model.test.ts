@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   calculateDynamicPayout,
   calculateAllocation,
+  calculateClaimAccounting,
   calculateContributionAccounting,
   calculateIllustrativeFundAccounting,
   calculateParticipantImpact,
@@ -183,6 +184,46 @@ describe('contribution allocation', () => {
     expect(accounting.creditedToProfileTotal).toBe(140)
     expect(accounting.recognitionCreditTotal).toBe(140)
     expect(accounting.creditedFundInflowTotal).toBe(100)
+  })
+})
+
+describe('claim accounting', () => {
+  it('summarizes only the signed-in user’s recorded benefits by recipient and claimed vs recycled', () => {
+    const accounting = calculateClaimAccounting([
+      { id: 'self-claimed', amount: 120, action: 'claimed', actorUserId: 'user-mira', userId: 'user-mira', profileId: 'profile-mira' },
+      { id: 'self-recycled', amount: 80, action: 'recycled', actorUserId: 'user-mira', userId: 'user-mira', profileId: 'profile-mira' },
+      { id: 'dependent-claimed', amount: 35, action: 'claimed', actorUserId: 'user-mira', userId: 'user-tala', profileId: 'profile-tala' },
+      { id: 'other-recycled', amount: 25, action: 'recycled', actorUserId: 'user-mira', userId: 'user-mira', profileId: 'profile-mira' },
+      { id: 'someone-else', amount: 200, action: 'claimed', actorUserId: 'user-ivo', userId: 'user-ivo', profileId: 'profile-ivo' },
+      { id: 'guardian-for-mira', amount: 15, action: 'claimed', actorUserId: 'user-guardian', userId: 'user-mira', profileId: 'profile-mira' },
+    ], 'user-mira', 'profile-mira', [{ id: 'user-tala', profileId: 'profile-tala' }], [
+      { sourceClaimId: 'self-recycled', profileId: 'profile-mira' },
+      { sourceClaimId: 'other-recycled', profileId: 'profile-memorial' },
+    ])
+
+    expect(accounting.recordedByUser).toHaveLength(4)
+    expect(accounting.yourself.claimedAmount).toBe(120)
+    expect(accounting.yourself.recycledAmount).toBe(80)
+    expect(accounting.yourself.totalAmount).toBe(200)
+    expect(accounting.dependents.claimedAmount).toBe(35)
+    expect(accounting.dependents.recycledAmount).toBe(0)
+    expect(accounting.dependents.totalAmount).toBe(35)
+    expect(accounting.others.claimedAmount).toBe(0)
+    expect(accounting.others.recycledAmount).toBe(25)
+    expect(accounting.others.totalAmount).toBe(25)
+  })
+
+  it('does not treat all-prototype claim totals as the current user’s recorded benefits', () => {
+    const accounting = calculateClaimAccounting([
+      { id: 'mine', amount: 10, action: 'claimed', actorUserId: 'user-mira', userId: 'user-mira', profileId: 'profile-mira' },
+      { id: 'theirs-claimed', amount: 188.47, action: 'claimed', actorUserId: 'user-ivo', userId: 'user-ivo', profileId: 'profile-ivo' },
+      { id: 'theirs-recycled', amount: 113, action: 'recycled', actorUserId: 'user-zuri', userId: 'user-zuri', profileId: 'profile-zuri' },
+    ], 'user-mira', 'profile-mira')
+
+    expect(accounting.yourself.totalAmount).toBe(10)
+    expect(accounting.dependents.totalAmount).toBe(0)
+    expect(accounting.others.totalAmount).toBe(0)
+    expect(accounting.yourself.totalAmount + accounting.dependents.totalAmount + accounting.others.totalAmount).toBe(10)
   })
 })
 
