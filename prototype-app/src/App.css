@@ -359,6 +359,8 @@ select[aria-invalid="true"], input[aria-invalid="true"] { border-color: #b8682c;
 .recognition-personal-grid { margin-top: 0; }
 .recognition-hero-card, .recognition-filters, .recognition-browser { min-width: 0; overflow: hidden; }
 .recognition-hero-card .muted strong { color: var(--green); }
+.recognition-ripple-orders { max-height: 220px; }
+.recognition-ripple-orders span { padding: 8px 10px; font-size: 13px; }
 .recognition-ripple { border-color: color-mix(in srgb, var(--circle-color, #8fbf74) 58%, #cbdcc5); background: radial-gradient(circle at center, color-mix(in srgb, var(--circle-color, #8fbf74) 24%, white) 0 9%, color-mix(in srgb, var(--circle-color, #8fbf74) 18%, #eef7e9) 10% 35%, rgba(248,251,245,.86) 36% 100%); }
 .recognition-ripple .wave { border-color: color-mix(in srgb, var(--circle-color, #8fbf74) 48%, transparent); }
 .recognition-metrics { margin-top: 0; }

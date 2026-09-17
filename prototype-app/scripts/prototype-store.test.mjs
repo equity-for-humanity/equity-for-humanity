@@ -72,6 +72,18 @@ describe('prototype JSON store', () => {
     expect(seed.funds.humanityFundBalance).toBeCloseTo(humanityFundContributions + seed.funds.modeledGrowth - paidBenefits - seed.funds.recycledStewardshipTransfers)
   })
 
+  it('marks a person verified once a claim is attributed to them', async () => {
+    const dataPath = await tempDataPath()
+    const snapshot = await loadSnapshot(dataPath)
+    const actor = snapshot.users.find((user) => user.username === 'Ivo Cedar')
+    expect(actor.verifiedHumanAt).toBeFalsy()
+
+    await createClaims(dataPath, { actorUserId: actor.id, targetUserIds: [actor.id], action: 'claimed', amount: 12 })
+    const after = await loadSnapshot(dataPath)
+    const verifiedActor = after.users.find((user) => user.id === actor.id)
+    expect(verifiedActor.verifiedHumanAt).toEqual(expect.any(String))
+  })
+
   it('does not inject the fictional scenario or persist aggregate changes when loading an existing snapshot', async () => {
     const dataPath = await tempDataPath()
     const existingSnapshot = {

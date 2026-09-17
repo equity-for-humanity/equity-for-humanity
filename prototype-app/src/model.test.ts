@@ -6,6 +6,7 @@ import {
   calculateContributionAccounting,
   calculateIllustrativeFundAccounting,
   calculateParticipantImpact,
+  getConnectorRippleOrders,
 } from './model'
 import * as contributionModel from './model'
 
@@ -249,5 +250,30 @@ describe('participant impact credit', () => {
     expect(impact.cumulativeContributionCredit).toBe(130)
     expect(impact.totalParticipantBenefitHistory).toBe(250)
     expect(impact.projectedFutureImpact).toBeGreaterThan(280)
+  })
+})
+
+describe('connector ripple orders', () => {
+  it('counts actual graph hops from the signed-in user instead of projecting later waves', () => {
+    const users = [
+      { id: 'hub', username: 'David', connector: '' },
+      { id: 'l1-a', username: 'Ivo Cedar', connector: 'David' },
+      { id: 'l1-b', username: 'Nila Hearth', connector: 'David' },
+      { id: 'l2-a', username: 'Zuri Vale', connector: 'Ivo Cedar' },
+      { id: 'l3-a', username: 'Aya Fern', connector: 'Zuri Vale' },
+      { id: 'l4-a', username: 'Luma Reed', connector: 'Aya Fern' },
+      { id: 'l5-a', username: 'Sol Maren', connector: 'Luma Reed' },
+      { id: 'l6-a', username: 'Further Grove', connector: 'Sol Maren' },
+      { id: 'orphan', username: 'Found It Myself', connector: '' },
+    ]
+    const orders = getConnectorRippleOrders(users[0], users)
+
+    expect(orders.map((order) => order.value)).toEqual([2, 1, 1, 1, 2])
+    expect(orders[4].runningTotal).toBe(7)
+    expect(orders[4].label).toBe('Fifth-order ripple')
+  })
+
+  it('returns empty orders when no signed-in user is present', () => {
+    expect(getConnectorRippleOrders(null, [{ id: 'hub', username: 'David', connector: '' }]).every((order) => order.value === 0)).toBe(true)
   })
 })
