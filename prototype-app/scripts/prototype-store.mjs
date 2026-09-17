@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { dirname } from 'node:path'
+import { assignSeedConnectorNetwork, markClaimAttributedUsersVerified } from '../functions/_shared/seed-coherence.js'
 
 export const MAX_DIRECT_GUARDIAN_CONNECTIONS = 2
 export const MAX_ACTIVE_CHILD_WARD_CONNECTIONS = 10
@@ -27,10 +28,10 @@ function seedLoginUser(user) {
 
 export function createSeedData() {
   const seed = {
-    version: 4,
+    version: 5,
     updatedAt: '2026-07-01T00:00:00.000Z',
     users: [
-      seedLoginUser({ id: 'user-david-brown', username: 'Mira North', country: 'Canada', ageGroup: '36–50', connector: 'Ivo Cedar', profileId: 'seed-profile-canada' }),
+      seedLoginUser({ id: 'user-david-brown', username: 'Mira North', country: 'Canada', ageGroup: '36–50', connector: '', connectorSelfDirected: true, profileId: 'seed-profile-canada' }),
       seedLoginUser({ id: 'user-anisa-brown', username: 'Tala North', country: 'Canada', ageGroup: '11–15', connector: 'Mira North', profileId: 'seed-profile-child', guardianUserId: 'user-david-brown', guardianUsername: 'Mira North', guardianStatus: 'accepted', guardianRequestedAt: '2026-06-29T00:00:00.000Z', guardianRespondedAt: '2026-06-30T00:00:00.000Z' }),
       seedLoginUser({ id: 'user-phillip-chen', username: 'Ivo Cedar', country: 'Canada', ageGroup: '26–30', connector: 'Zuri Vale', profileId: 'user-profile-phillip' }),
       seedLoginUser({ id: 'user-amina-okafor', username: 'Zuri Vale', country: 'Nigeria', ageGroup: '21–25', connector: 'Nila Hearth', profileId: 'user-profile-amina' }),
@@ -52,7 +53,8 @@ export function createSeedData() {
         country: 'Canada',
         ageGroup: '36–50',
         description: 'Individual participant profile for prototype testing.',
-        connector: 'Ivo Cedar',
+        connector: '',
+        connectorSelfDirected: true,
         createdAt: '2026-06-01T00:00:00.000Z',
       },
       {
@@ -340,7 +342,7 @@ function ensureScenarioFixture(snapshot) {
       const userId = `scenario-user-${padded}`
       const profileId = `scenario-profile-${padded}`
       const username = `Fictional Participant ${padded}`
-      const connector = index % 7 === 0 ? 'Ivo Cedar' : ''
+      const connector = ''
       snapshot.users.push({ id: userId, username, country, ageGroup, connector, profileId, verificationMethod: 'demo-simulation', proofOfHuman: false, scenarioFixture: true })
       snapshot.profiles.push({ id: profileId, name: username, type: 'Individual', country, ageGroup, description: 'Fictional sample profile used only for the prototype’s illustrative fund calculation.', connector, scenarioFixture: true, createdAt: '2026-06-08T00:00:00.000Z' })
       const amount = 2500 + ((index * 173) % 4000)
@@ -350,7 +352,8 @@ function ensureScenarioFixture(snapshot) {
     changed = true
   }
 
-  snapshot.version = Math.max(Number(snapshot.version) || 1, 4)
+  assignSeedConnectorNetwork(snapshot)
+  snapshot.version = Math.max(Number(snapshot.version) || 1, 5)
   return changed
 }
 
@@ -1144,7 +1147,7 @@ function getClaimPathway(user) {
 }
 
 function syncVerifiedClaimPathways(snapshot) {
-  let changed = false
+  let changed = markClaimAttributedUsersVerified(snapshot)
   const profilesById = new Map((snapshot.profiles ?? []).map((profile) => [profile.id, profile]))
   for (const user of snapshot.users ?? []) {
     if (!user.verifiedHumanAt) continue

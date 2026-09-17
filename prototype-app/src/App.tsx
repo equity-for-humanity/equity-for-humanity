@@ -12,6 +12,7 @@ import {
   calculatePayoutScenario,
   formatCompactMoney,
   formatMoney,
+  getConnectorRippleOrders,
   splitContributionEqually,
   type AllocationMode,
 } from './model'
@@ -1786,27 +1787,6 @@ function getConnectorCircle(total: number) {
   return connectorRippleCircleLevels.reduce((current, level) => total >= level.threshold ? level : current, connectorRippleCircleLevels[0])
 }
 
-function getConnectorRippleOrders(user: User | null, users: User[]) {
-  const directConnections = user ? users.filter((item) => item.id !== user.id && item.connector === user.username) : []
-  const directNames = new Set(directConnections.map((item) => item.username))
-  const secondConnections = users.filter((item) => item.id !== user?.id && directNames.has(item.connector ?? '') && !directNames.has(item.username))
-  const secondNames = new Set(secondConnections.map((item) => item.username))
-  const thirdConnections = users.filter((item) => item.id !== user?.id && secondNames.has(item.connector ?? '') && !directNames.has(item.username) && !secondNames.has(item.username))
-  const directMultiplier = directConnections.length > 0 ? secondConnections.length / directConnections.length : 0
-  const secondMultiplier = secondConnections.length > 0 ? thirdConnections.length / secondConnections.length : directMultiplier
-  const rippleMultiplier = Math.max(directMultiplier, secondMultiplier, 1)
-  const fourthRipple = Math.round(Math.max(0, thirdConnections.length * rippleMultiplier))
-  const fifthRipple = Math.round(Math.max(0, fourthRipple * rippleMultiplier))
-  return [
-    { label: 'Direct connectors', value: directConnections.length, note: 'people who named you directly', celebratory: false },
-    { label: 'Second-order ripple', value: secondConnections.length, note: 'people reached through your direct connectors', celebratory: true },
-    { label: 'Third-order ripple', value: thirdConnections.length, note: 'one more step through the network', celebratory: true },
-    { label: 'Fourth-order ripple', value: fourthRipple, note: 'prototype projection if the pattern continues', celebratory: true },
-    { label: 'Fifth-order ripple', value: fifthRipple, note: 'another possible wave of connection', celebratory: true },
-  ].map((item, index, orders) => ({ ...item, runningTotal: orders.slice(0, index + 1).reduce((total, order) => total + order.value, 0) }))
-}
-
-
 function getPersonalClaims(claims: ClaimRecord[], user: User | null) {
   if (!user) return []
   return claims.filter((claim) => claim.userId === user.id || claim.profileId === user.profileId || claim.targetName === user.username)
@@ -1914,7 +1894,7 @@ function CompoundScreen({ averageGrowth, setAverageGrowth, onBack, onNext, onRef
             <div className="ripple-stats scroll-ripple-stats">
               {rippleOrders.map((item, index) => <span key={item.label}><b>{index === 0 ? item.value.toLocaleString() : `+ ${item.value.toLocaleString()} = ${item.runningTotal.toLocaleString()}`}</b> {item.label} {item.celebratory && item.value > 0 ? '🎉' : ''}<small>{item.note}</small></span>)}
             </div>
-            <p className="muted small-note">Direct through third order uses prototype account data. Fourth and fifth are simple projections.</p>
+            <p className="muted small-note">Each order is counted from the live connector graph of the signed-in account. Fifth order includes any further hops.</p>
           </div>
         </div>
       </div>
@@ -2112,13 +2092,16 @@ function RecognitionScreen({ funds, countries, ageRows, claims, contributions, l
       </div>
       <div className="soft-card recognition-hero-card">
         <div className="recognition-card-heading"><h3>Your connector ripple circle</h3><button className="secondary mini-refresh" type="button" onClick={() => setConnectorReplayNonce((nonce) => nonce + 1)}>Refresh circle</button></div>
-        <p className="muted">This recognizes the ripple you helped start — direct connectors plus later waves through the network.</p>
+        <p className="muted">This recognizes the ripple you helped start — people who named you, then later waves counted from that same connector graph.</p>
         <div key={`connector-${connectorReplayIndex}`} className="pond-ripple celebratory-ripple recognition-ripple" style={{ '--circle-color': replayConnectorCircle.color } as React.CSSProperties}>
           <span className="wave wave-one" /><span className="wave wave-two" /><span className="wave wave-three" />
           {personalRippleTotal > 0 && <div className="growth-fireworks ripple-fireworks" aria-hidden="true">{Array.from({ length: Math.max(4, connectorReplayIndex + 3) }, (_, index) => <span key={index} />)}</div>}
           <strong><span>{personalRippleTotal.toLocaleString()}</span><small>{replayConnectorCircle.name}</small></strong>
         </div>
         <Metric label="Connector ripple total" value={personalRippleTotal.toLocaleString()} note={personalConnectorCircle.label} />
+        <div className="ripple-stats scroll-ripple-stats recognition-ripple-orders">
+          {personalRippleOrders.map((item, index) => <span key={item.label}><b>{index === 0 ? item.value.toLocaleString() : `+ ${item.value.toLocaleString()} = ${item.runningTotal.toLocaleString()}`}</b> {item.label}<small>{item.note}</small></span>)}
+        </div>
       </div>
     </div>
 
