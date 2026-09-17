@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   calculateDynamicPayout,
   calculateAllocation,
+  calculateClaimAccounting,
   calculateContributionAccounting,
   calculateIllustrativeFundAccounting,
   calculateParticipantImpact,
@@ -183,6 +184,55 @@ describe('contribution allocation', () => {
     expect(accounting.creditedToProfileTotal).toBe(140)
     expect(accounting.recognitionCreditTotal).toBe(140)
     expect(accounting.creditedFundInflowTotal).toBe(100)
+  })
+})
+
+describe('claim accounting', () => {
+  it('summarizes only the signed-in user’s recorded benefits by recipient and claimed vs recycled', () => {
+    const accounting = calculateClaimAccounting([
+      { id: 'self-claimed', amount: 120, action: 'claimed', actorUserId: 'user-mira', userId: 'user-mira', profileId: 'profile-mira' },
+      { id: 'self-recycled', amount: 80, action: 'recycled', actorUserId: 'user-mira', userId: 'user-mira', profileId: 'profile-mira' },
+      { id: 'dependent-claimed', amount: 35, action: 'claimed', actorUserId: 'user-mira', userId: 'user-tala', profileId: 'profile-tala' },
+      { id: 'dependent-recycled', amount: 10, action: 'recycled', actorUserId: 'user-mira', userId: 'user-tala', profileId: 'profile-tala' },
+      { id: 'other-claimed', amount: 18, action: 'claimed', actorUserId: 'user-mira', userId: 'user-zuri', profileId: 'profile-zuri' },
+      { id: 'other-recycled', amount: 25, action: 'recycled', actorUserId: 'user-mira', userId: 'user-mira', profileId: 'profile-mira' },
+      { id: 'someone-else', amount: 200, action: 'claimed', actorUserId: 'user-ivo', userId: 'user-ivo', profileId: 'profile-ivo' },
+      { id: 'guardian-for-mira', amount: 15, action: 'claimed', actorUserId: 'user-guardian', userId: 'user-mira', profileId: 'profile-mira' },
+    ], 'user-mira', 'profile-mira', [{ id: 'user-tala', profileId: 'profile-tala' }], [
+      { sourceClaimId: 'self-recycled', profileId: 'profile-mira', amount: 80 },
+      { sourceClaimId: 'dependent-recycled', profileId: 'profile-tala', amount: 10 },
+      { sourceClaimId: 'other-recycled', profileId: 'profile-memorial', amount: 25 },
+    ])
+
+    expect(accounting.recordedByUser).toHaveLength(6)
+    expect(accounting.yourself.claimedAmount).toBe(120)
+    expect(accounting.yourself.recycledAmount).toBe(80)
+    expect(accounting.yourself.totalAmount).toBe(200)
+    expect(accounting.dependents.claimedAmount).toBe(35)
+    expect(accounting.dependents.recycledAmount).toBe(10)
+    expect(accounting.dependents.totalAmount).toBe(45)
+    expect(accounting.onBehalfOfOthers.claimedAmount).toBe(18)
+    expect(accounting.onBehalfOfOthers.recycledAmount).toBe(25)
+    expect(accounting.onBehalfOfOthers.totalAmount).toBe(43)
+  })
+
+  it('attributes on-behalf-of-others amounts to those people, not the acting user or all-prototype totals', () => {
+    const accounting = calculateClaimAccounting([
+      { id: 'mine', amount: 10, action: 'claimed', actorUserId: 'user-mira', userId: 'user-mira', profileId: 'profile-mira' },
+      { id: 'on-behalf-claimed', amount: 22, action: 'claimed', actorUserId: 'user-mira', userId: 'user-luma', profileId: 'profile-luma' },
+      { id: 'on-behalf-recycled', amount: 14, action: 'recycled', actorUserId: 'user-mira', userId: 'user-mira', profileId: 'profile-mira' },
+      { id: 'theirs-claimed', amount: 188.47, action: 'claimed', actorUserId: 'user-ivo', userId: 'user-ivo', profileId: 'profile-ivo' },
+      { id: 'theirs-recycled', amount: 113, action: 'recycled', actorUserId: 'user-zuri', userId: 'user-zuri', profileId: 'profile-zuri' },
+    ], 'user-mira', 'profile-mira', [], [
+      { sourceClaimId: 'on-behalf-recycled', profileId: 'profile-willowlight', amount: 14 },
+    ])
+
+    expect(accounting.yourself.totalAmount).toBe(10)
+    expect(accounting.dependents.totalAmount).toBe(0)
+    expect(accounting.onBehalfOfOthers.claimedAmount).toBe(22)
+    expect(accounting.onBehalfOfOthers.recycledAmount).toBe(14)
+    expect(accounting.onBehalfOfOthers.totalAmount).toBe(36)
+    expect(accounting.yourself.totalAmount + accounting.dependents.totalAmount + accounting.onBehalfOfOthers.totalAmount).toBe(46)
   })
 })
 
