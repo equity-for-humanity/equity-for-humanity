@@ -358,3 +358,57 @@ export function formatPercent(value: number): string {
     maximumFractionDigits: 1,
   }).format(value)
 }
+
+export type ConnectorRippleParticipant = {
+  id: string
+  username: string
+  connector?: string
+}
+
+export type ConnectorRippleOrder = {
+  label: string
+  value: number
+  note: string
+  celebratory: boolean
+  runningTotal: number
+}
+
+const CONNECTOR_RIPPLE_ORDER_META = [
+  { label: 'Direct connectors', note: 'people who named you directly', celebratory: false },
+  { label: 'Second-order ripple', note: 'people reached through your direct connectors', celebratory: true },
+  { label: 'Third-order ripple', note: 'one more step through the network', celebratory: true },
+  { label: 'Fourth-order ripple', note: 'the next wave through the network', celebratory: true },
+  { label: 'Fifth-order ripple', note: 'fifth and further hops through the network', celebratory: true },
+] as const
+
+export function getConnectorRippleOrders(
+  user: ConnectorRippleParticipant | null | undefined,
+  users: ConnectorRippleParticipant[],
+): ConnectorRippleOrder[] {
+  const counts = [0, 0, 0, 0, 0]
+  if (user) {
+    const remaining = users.filter((item) => item.id !== user.id)
+    const seenUsernames = new Set<string>([user.username])
+    let frontier = new Set<string>([user.username])
+    for (let depth = 0; depth < counts.length; depth += 1) {
+      const next = remaining.filter((item) => frontier.has(item.connector ?? '') && !seenUsernames.has(item.username))
+      counts[depth] = next.length
+      for (const item of next) seenUsernames.add(item.username)
+      frontier = new Set(next.map((item) => item.username))
+      if (depth !== counts.length - 1) continue
+      while (frontier.size > 0) {
+        const more = remaining.filter((item) => frontier.has(item.connector ?? '') && !seenUsernames.has(item.username))
+        if (more.length === 0) break
+        counts[depth] += more.length
+        for (const item of more) seenUsernames.add(item.username)
+        frontier = new Set(more.map((item) => item.username))
+      }
+    }
+  }
+
+  return CONNECTOR_RIPPLE_ORDER_META.map((meta, index) => ({
+    ...meta,
+    value: counts[index],
+    runningTotal: counts.slice(0, index + 1).reduce((total, value) => total + value, 0),
+  }))
+}
