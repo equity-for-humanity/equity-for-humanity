@@ -195,6 +195,7 @@
     }
 
     /* Plan documents (plan/*.html, generated from docs/plan/*.md) */
+    nav.doc-switcher,nav.doc-toc,nav.doc-pager{height:auto;display:block}
     .doc-hero{padding:40px 0 26px}
     .doc-hero .status-disclaimer{margin-top:16px}
     .doc-switcher ol{list-style:none;margin:20px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
@@ -214,7 +215,7 @@
     .doc-toc ol{list-style:none;margin:0;padding:0;display:grid;gap:6px}
     .doc-toc a{color:var(--muted);text-decoration:none;font-weight:650}
     .doc-toc a:hover{color:var(--ink);text-decoration:underline}
-    .doc-body{max-width:820px;font-size:17px;color:#2f4637}
+    .doc-body{max-width:820px;min-width:0;font-size:17px;color:#2f4637}
     .doc-body h1{font-size:clamp(34px,5vw,54px);line-height:1.02;letter-spacing:-.05em;margin:0 0 20px;color:var(--ink)}
     .doc-body h2{font-size:clamp(25px,3vw,33px);letter-spacing:-.035em;line-height:1.1;margin:44px 0 12px;padding-top:18px;border-top:1px solid var(--line);scroll-margin-top:84px}
     .doc-body h3{font-size:20px;letter-spacing:-.015em;margin:28px 0 8px;scroll-margin-top:84px}
@@ -241,13 +242,13 @@
     .doc-body th{background:var(--soft);font-weight:820;color:var(--ink);white-space:nowrap}
     .doc-body tr:last-child td{border-bottom:0}
     .doc-foot{max-width:820px}
-    .doc-pager{display:flex;justify-content:space-between;gap:12px;margin-top:40px;flex-wrap:wrap}
+    nav.doc-pager{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:40px;flex-wrap:wrap}
     .doc-source{margin-top:18px;color:var(--muted);font-size:14px}
     .doc-source a{color:var(--green)}
     .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
     @media(max-width:960px){
-      .doc-layout{grid-template-columns:1fr;gap:10px}
+      .doc-layout{grid-template-columns:minmax(0,1fr);gap:10px}
       .doc-toc{position:static;border-left:0;border:1px solid var(--line);border-radius:18px;padding:14px 16px;background:rgba(255,255,255,.7)}
       .doc-foot{max-width:none}
     }
