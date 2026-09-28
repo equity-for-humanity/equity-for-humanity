@@ -1,89 +1,88 @@
-# Operations with AI agents
+# Operations
 
-> **Working draft.** This page describes how a single volunteer founder can run E4H with AI agents doing most of the work, while people stay accountable. It follows the rule already in the [administration principles](../current/equity-for-humanity-administration-principles-v0.1.md): **agents reduce the burden; humans carry the responsibility.**
+> **Working draft.** This page describes how the work of Equity for Humanity is organized. It applies the principle set out in the [Administration and Stewardship Principles](../current/equity-for-humanity-administration-principles-v0.1.md): "Agents reduce the burden. Humans carry the responsibility."
 
-## The short answer
+## In brief
 
-- One **coordinator agent** keeps the task list, runs helper agents, and prepares a short "approval queue" for the founder.
-- **Helper agents** each handle one area: inbox, website and app, research, outreach drafts, bookkeeping, and video preparation.
-- The founder spends time only on the approval queue and on things that need a human.
-- **Agents never move money, sign, file with governments, or send anything public without approval.**
+- The project is led by a founder, supported by a small number of volunteers and assisted by AI agents that do the bulk of the work, to keep costs down.
+- AI agents prepare work. People approve it. Decisions on money, legal matters, and public commitments are always made by people.
+- No AI agent moves money, signs documents, makes government filings, or publishes anything without approval.
 
-## Who does what
+## Roles
 
-| Role | Does | Tools (low cost) |
+| Role | Responsibilities | Tools |
 |---|---|---|
-| **Founder** | Approves, signs, verifies identity, opens accounts, records voice or video, makes final decisions | Phone, laptop, 30 to 60 minutes per approval session |
-| **Co-stewards** (from Stage 1) | Second approver for money and public commitments; board duties once incorporated | Same |
-| **Coordinator agent** | Keeps [status](status.md) and GitHub Issues current; breaks work into tasks; assigns helpers; prepares the approval queue; writes a weekly summary | GitHub Issues and Projects (free), this repository |
-| **Inbox helper** | Sorts incoming email, drafts replies, flags anything important | Project address forwarding to the project Gmail; drafts only |
-| **Web and app helper** | Updates the website and the prototype through pull requests | GitHub, GitHub Pages (free) |
-| **Research helper** | Checks facts, watches for rule changes, updates these documents with sources | Web search |
-| **Outreach helper** | Drafts partner emails and call briefs; logs replies | Templates in [partners](partners-and-outreach.md) |
-| **Bookkeeping helper** (Stage 2+) | Keeps the public ledger from bank and brokerage statements; drafts reports | A spreadsheet or CSV file in the repo; read-only statement exports |
-| **Media helper** | Scripts, transcripts, captions, thumbnails, posting drafts | See [communications](communications.md) |
+| **Founder** | Leads the project; approves work; signs documents; completes identity checks; opens accounts; records voice or video; makes final decisions until a board exists | Standard computer and phone |
+| **Volunteers and advisors** | Review drafts in their areas of expertise; act as second approvers for financial matters and public commitments; serve as directors once the entity is incorporated | Same |
+| **Coordinator agent** | Maintains the [status tracker](status.md) and GitHub Issues; divides work into tasks; assigns tasks to helper agents; prepares a queue of items for approval; writes a weekly summary | GitHub Issues and Projects; this repository |
+| **Correspondence agent** | Sorts incoming email; drafts replies; flags important items | Project inbox, with drafting access only |
+| **Website and application agent** | Prepares updates to the website and the prototype as pull requests | GitHub; GitHub Pages |
+| **Research agent** | Verifies facts; monitors changes to rules and programs; updates these documents with sources | Web search |
+| **Outreach agent** | Drafts correspondence and briefing notes; records replies | Templates in [partners](partners-and-outreach.md) |
+| **Bookkeeping agent** (from Stage 2) | Prepares the public ledger from bank and brokerage statements; drafts financial reports | Read-only statement exports; a ledger file in the repository |
+| **Media agent** | Prepares scripts, transcripts, captions, thumbnails, and draft posts | See [communications](communications.md) |
 
-## The approval matrix
+## Approval matrix
 
-| Task | Agents alone | Founder approves first | Always human only |
+| Task | AI agents may do alone | Requires founder approval | Reserved to people |
 |---|---|---|---|
-| Research, fact-checking, updating drafts in the repo | Yes | | |
-| Opening pull requests with website or document changes | Yes | Merging to the live site | |
+| Research, fact-checking, and updating drafts in the repository | Yes | | |
+| Preparing website or document changes as pull requests | Yes | Publishing to the live site | |
 | Updating the status tracker and GitHub Issues | Yes | | |
-| Sorting the inbox, labelling, drafting replies | Yes | Sending any reply | |
-| Replies to routine questions using approved FAQ text | | Yes (batch approval is fine) | |
-| Emails to partners, funders, media | Drafting | Sending | |
-| Social media posts and videos | Drafting, editing, scheduling as drafts | Publishing | |
-| Speaking on camera or voice as the founder | | | **Yes** |
-| Using an AI voice or likeness of the founder | | | **Never without explicit written consent, and always disclosed** |
+| Sorting email and drafting replies | Yes | Sending any reply | |
+| Routine replies using approved text | | Yes; may be approved in batches | |
+| Correspondence with partners, funders, and media | Drafting | Sending | |
+| Social media posts and videos | Drafting, editing, and preparing unpublished drafts | Publishing | |
+| Speaking on camera or voice for the project | | | Yes |
+| Use of an AI-generated voice or likeness of any person | | | Never without that person's written consent, and always disclosed |
 | Grant applications | Drafting | Submitting | Signing any agreement |
-| Legal filings, incorporation, CRA forms | Preparing forms and checklists | | **Signing and submitting** |
-| Opening bank or brokerage accounts; identity checks | Preparing checklists | | **Yes** |
-| Moving money, paying bills, placing trades | | | **Yes, with two people** |
-| Accepting a donation or a pledge | | | **Yes, board decision** |
-| Changing payout rules, investment policy, privacy policy | Drafting options | | **Board vote** |
-| Access to personal data of participants | | | **Only named humans; agents see anonymized data** |
-| Public statements about legal status, tax, or returns | Drafting | Founder and a co-steward | |
+| Incorporation and other government filings | Preparing forms and checklists | | Signing and filing |
+| Opening bank or brokerage accounts; identity checks | Preparing checklists | | Yes |
+| Moving money, paying invoices, or placing trades | | | Yes, with two approvers |
+| Accepting a contribution or pledge | | | Yes, by board decision |
+| Changes to the payout rule, investment policy, or privacy policy | Drafting options | | Yes, by board decision, consistent with the founding documents |
+| Access to participants' personal data | | | Named individuals only; AI agents work with anonymized data |
+| Public statements on legal status, tax, or returns | Drafting | Founder and one volunteer or advisor | |
 
-## Safeguards for money
+## Financial safeguards
 
-These apply as soon as E4H holds any money, and are drafted now so they are ready.
+These safeguards take effect as soon as the project holds any funds. They are drafted now so that they are ready in advance.
 
-1. **No autonomous money movement.** No agent has login access to a bank or brokerage account that can move money. Agents may receive read-only statement exports.
-2. **Two approvals for every payment or trade.** The bank account requires two signatures (or two online approvers). This is standard nonprofit practice.
+1. **No autonomous money movement.** No AI agent has access to any account that can move money. Agents may receive read-only statements.
+2. **Dual approval.** Every payment or trade requires two authorized people.
 3. **Separation of duties.** The person who approves a payment is not the only person who records it.
-4. **Public ledger.** Every dollar in and out is published at least monthly, like Open Collective's transparent budgets ([Open Collective fiscal hosts](https://documentation.opencollective.com/fiscal-hosts/fiscal-hosts)). Personal data of recipients is never published.
-5. **Two buckets, always separate.** The Humanity Fund (Bucket A) and the stewardship budget (Bucket B) have separate accounts and separate ledger sections, as the [administration principles](../current/equity-for-humanity-administration-principles-v0.1.md) require.
-6. **Payouts only through regulated partners.** E4H does not build its own wallet or payment system (see [legal options](legal-structure-options.md)).
-7. **Annual review** of all access rights, and immediately when a person leaves.
+4. **Public ledger.** Every amount received and spent is published at least monthly. Recipients' personal data is never published. Open Collective's transparent budgets are a reference model ([Open Collective, fiscal hosts](https://documentation.opencollective.com/fiscal-hosts/fiscal-hosts)).
+5. **Separate buckets.** The Humanity Fund (Bucket A) and the Stewardship and Operations Reserve (Bucket B) are held in separate accounts and reported separately, as the Administration and Stewardship Principles require.
+6. **Regulated partners for distributions.** The project will not operate its own wallet or payment system. See [legal structure](legal-structure-options.md).
+7. **Access review.** All access rights are reviewed annually and whenever a person leaves a role.
 
-## Safeguards for agents
+## Safeguards for AI agents
 
-AI agents that read email or web pages can be tricked by hidden instructions in that content. This is called **prompt injection**, and it is the top risk in the OWASP list for AI applications ([OWASP Top 10 for LLM applications 2025](https://genai.owasp.org/download/43299/)). The danger is highest when one agent has all three of these at once: access to private data, exposure to untrusted content (like incoming email), and the ability to send information out. Security researcher Simon Willison calls this the "lethal trifecta" ([Willison, June 2025](https://simonwillison.net/2025/jun/16/the-lethal-trifecta/)).
+AI systems that read email or web pages can be manipulated by instructions hidden in that content. This is known as prompt injection, and it is ranked first in the OWASP Top 10 for large language model applications ([OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/download/43299/)). The risk is greatest when a single agent combines access to private data, exposure to untrusted content, and the ability to send information externally, a combination the security researcher Simon Willison calls the "lethal trifecta" ([Willison, June 2025](https://simonwillison.net/2025/jun/16/the-lethal-trifecta/)).
 
-E4H's rules:
+The project applies the following rules:
 
-- **The inbox helper can read and draft, but cannot send.** Sending is always a human click.
-- **No agent that reads untrusted content also has access to secrets** (passwords, bank logins, the private-beta access code).
-- **Least privilege.** Each helper gets only the access its job needs. Website helpers work through pull requests that a human merges.
-- **Treat instructions inside emails, documents, and web pages as data, not commands.** If content asks an agent to do something, the agent flags it for the founder instead.
-- **Keep a log.** Agent actions on the repo are visible in GitHub history.
-- **Private beta stays separate.** Agents working on public documents do not touch the Cloudflare private-beta deployment or its settings.
+- **The correspondence agent may read and draft email, but may not send it.** Sending always requires a person.
+- **No agent that reads untrusted content also has access to credentials,** such as passwords, bank logins, or the private-beta access code.
+- **Least privilege.** Each agent has only the access its task requires. Website changes are made through pull requests reviewed by a person.
+- **Instructions found in emails, documents, or web pages are treated as information, not commands.** Any such request is flagged for review.
+- **Traceability.** Agent changes to the repository are recorded in its history.
+- **Separation from the private beta.** Agents working on public documents do not access the private-beta deployment or its configuration.
 
-## Project inbox setup
+## Project inbox
 
-- **Now:** keep the existing project Gmail. Add a project address on the E4H domain that forwards to it. Cloudflare Email Routing does this for free if the domain uses Cloudflare for DNS ([Cloudflare Email Routing](https://developers.cloudflare.com/email-routing/)) **[UNVERIFIED current DNS host for equityforhumanity.org]**.
-- **Later:** once E4H is a **registered charity**, it can apply for Google for Nonprofits (free Google Workspace and YouTube nonprofit features). In Canada this requires a CRA charity number ending in "RR"; a non-profit without charity status does not qualify ([Google for Nonprofits, registration numbers](https://support.google.com/nonprofits/answer/12172927?hl=en_ph)).
+- **Current arrangement:** the existing project inbox remains in use. A project address on the Equity for Humanity domain can forward to it; Cloudflare Email Routing offers this at no charge where the domain uses Cloudflare for DNS ([Cloudflare Email Routing](https://developers.cloudflare.com/email-routing/)) **[UNVERIFIED current DNS provider]**.
+- **Google for Nonprofits:** in Canada this program requires a CRA registered charity number ([Google for Nonprofits, registration numbers](https://support.google.com/nonprofits/answer/12172927?hl=en_ph)). Because the core fund is planned as a non-charity structure, the project is not expected to be eligible.
 
-## Weekly rhythm (about one hour of founder time)
+## Weekly routine
 
-1. **Coordinator agent posts a weekly summary** as a GitHub issue: what was done, what is waiting for approval, what is blocked.
-2. **Founder approval session** (30 to 60 minutes): approve or reject each queued item. Anything unclear goes back with one line of feedback.
-3. **Agents act on approvals** and update [status](status.md).
-4. **If the founder skips a week**, nothing breaks. Agents keep drafting but nothing goes out.
+1. **The coordinator agent publishes a weekly summary** as a GitHub issue, covering completed work, items awaiting approval, and blocked items.
+2. **The founder reviews the approval queue** and approves, rejects, or returns each item with brief feedback.
+3. **Agents act on the decisions** and update the [status tracker](status.md).
+4. **If no review takes place in a given week,** agents continue drafting, but nothing is released.
 
 ## Bookkeeping
 
-- **Stage 0 to 1:** there is nothing to book, because no money is held. Personal costs the founder chooses to cover (such as the domain) are not project income.
-- **Stage 2:** a simple public ledger (date, description, amount, bucket, category, receipt link) kept as a CSV file in the repo, generated from statements by the bookkeeping helper and approved by the treasurer each month. Reporting categories follow the administration principles.
-- **Later:** accounting software and, once required or wise, an external accountant review.
+- **Stages 0 and 1:** the project holds no funds, so there is nothing to record. Costs that the founder or volunteers choose to cover personally are not project income.
+- **Stage 2 onward:** a public ledger records the date, description, amount, bucket, category, and supporting document for each transaction. It is prepared from statements and approved monthly by the treasurer. Reporting categories follow the Administration and Stewardship Principles.
+- **Later:** accounting software and, when required or advisable, a review by an external accountant.

@@ -1,119 +1,103 @@
 # Communications
 
-> **Working draft.** Nothing here has been published. All posts and videos need founder approval.
+> **Working draft.** Nothing described here has been published. All posts and videos require founder approval.
 
-## The short answer
+## In brief
 
-- **YouTube first.** Short, honest explainer videos are the best way to show the idea and the person behind it. Everything else (X, LinkedIn, newsletter) reuses the same content.
-- **Start with 3 videos, not 30.** Quality and honesty over volume.
-- **The founder records voice or face; agents do everything else:** scripts, editing notes, captions in English and French, thumbnails, descriptions, and post drafts.
-- **Always say what E4H is not:** not a charity yet, not accepting money, not an investment.
+- **YouTube is the main channel.** Short explanatory videos present the concept clearly. Other channels reuse the same material.
+- **A small first series.** Three to five videos, prepared with care, rather than frequent output.
+- **Accuracy and restraint.** Every item states what Equity for Humanity is not: not a charity, not an investment, and not accepting contributions.
 
 ## Channel plan
 
-| Channel | Role | Frequency (start small) | Who |
+| Channel | Purpose | Frequency | Responsibility |
 |---|---|---|---|
-| **YouTube** (priority) | Main home for explainer videos (2 to 4 minutes) plus Shorts cut from them | 1 video every 2 to 4 weeks when energy allows | Founder records; agents prepare and edit |
-| **Website plan pages** | The reference for everything; every video links here | Updated as work happens | Agents |
-| **X** (@Equity4Humanity) | Short updates, clips, replies to basic-income and AI-abundance conversations | 2 to 3 posts a week, drafted in batches | Agents draft; founder approves |
-| **LinkedIn** | Credibility with funders, policy people, and professionals | 1 post per video | Agents draft; founder approves |
-| **Newsletter** (free tier on a service such as Buttondown or Substack) | Monthly "what changed" note for supporters | Monthly, from Stage 1 | Agents draft |
-| **Podcasts** | Guest spots once the videos exist | Pitch 1 or 2 shows per quarter | Agents research and draft pitches |
-| **Communities** | Basic-income, effective-giving, and AI forums; Reddit's basic income community; Hacker News "Show HN" for the open-source app | Only when there is something real to show | Founder approves every post |
-| **French** | French captions on every video; French summary pages | Every release | Agents translate; a French speaker reviews |
+| **YouTube** (priority) | Explanatory videos of two to four minutes, with short excerpts | One video every few weeks, as capacity allows | Founder records; AI agents prepare and edit |
+| **Website documents** | The reference for all communications; every video links to it | Updated as work progresses | AI agents prepare; founder approves |
+| **X** (@Equity4Humanity) | Brief updates and excerpts; participation in discussions on basic income and AI | Two to three posts per week, drafted in batches | AI agents draft; founder approves |
+| **LinkedIn** | Communication with funders, policy specialists, and professionals | One post per video | AI agents draft; founder approves |
+| **Newsletter** (free tier of an established service) | Monthly update for interested readers | Monthly, from Stage 1 | AI agents draft; founder approves |
+| **Podcasts** | Guest appearances once the videos exist | One or two proposals per quarter | AI agents research and draft |
+| **Online communities** | Basic income, effective giving, and open-source forums | Only when there is substantive progress to report | Founder approves every post |
+| **French** | French captions on every video and French versions of key pages | Every release | AI agents translate; a French-speaking volunteer reviews |
 
-## Rules for every piece of content
+## Publication rules
 
-1. **Honest status line** in every description: "E4H is a concept. It does not accept money and is not a charity or investment."
-2. **No promises** of returns, payouts, dates, or tax receipts.
-3. **AI disclosure.** YouTube requires creators to disclose realistic AI-generated or AI-altered content, such as making a real person appear to say something they did not. Using AI for scripts, captions, or editing does not by itself require the label ([YouTube Help, disclosing GenAI content](https://support.google.com/youtube/answer/14328491)). E4H goes further: each description says "Scripts and editing assisted by AI. Voice and views are the founder's."
-4. **No mass-produced content.** YouTube does not monetize "inauthentic content" such as templated, repetitive, or mass-produced videos, including AI-generated ones without original insight ([YouTube monetization policies](https://support.google.com/youtube/answer/1311392?hl=en)). E4H is not seeking monetization, but the same rule is good practice.
-5. **Accessibility.** Captions on every video; readable contrast on thumbnails; plain language.
-6. **Privacy.** No personal details about the founder beyond what the founder chooses to say on camera.
+1. **Status statement.** Every description includes: "Equity for Humanity is at the concept stage. It is not a charity or an investment, and it does not accept contributions."
+2. **No promises.** No statements about returns, distribution amounts, dates, or tax treatment.
+3. **Accurate claims.** Every factual statement can be traced to a source or to the founding documents. Uncertainty is stated as such.
+4. **Disclosure of AI use.** YouTube requires creators to disclose realistic content that is generated or significantly altered by AI, such as a real person appearing to say something they did not say. The use of AI for scripts, captions, or editing does not in itself require the label ([YouTube Help, disclosing AI-generated content](https://support.google.com/youtube/answer/14328491)). Equity for Humanity goes further: every description states that scripts and editing were prepared with AI assistance.
+5. **Original content only.** YouTube does not monetize mass-produced or repetitive content, including AI-generated content without original contribution ([YouTube channel monetization policies](https://support.google.com/youtube/answer/1311392?hl=en)). The project does not seek monetization, but applies the same standard.
+6. **Accessibility.** Captions on every video, sufficient contrast on thumbnails, and plain language.
+7. **Privacy.** No personal information about the founder or volunteers beyond what they choose to share.
 
-## First video series: "Who owns the future?"
+## First video series
 
-Five short videos. Each one stands alone and ends with the same call to action: "Read the plan and tell us what we got wrong."
+Each video stands alone and ends with the same invitation: to read the published documents and send comments or corrections.
 
-| # | Title | Length | Key points | Visuals |
+| # | Title | Length | Content | Visuals |
 |---|---|---|---|---|
-| 1 | **If AI makes us rich, who gets the money?** | about 3 min | AI may create huge wealth; ownership decides who benefits; E4H's idea in one sentence; what it is not | Founder to camera or voice over simple animated diagram of the Connect, Contribute, Claim, Compound cycle |
-| 2 | **Charity that never runs out** | about 3 min | A gift spent once versus a gift invested forever; the whole-world index; returns shared, the rest keeps growing; the dynamic payout rule in plain words | Simple chart of a paper fund over time |
-| 3 | **Why we don't take your money (yet)** | about 3 min | Legal home, safeguards, two signatures, public ledger; the charity-law surprise about paying everyone; honesty as a feature | Checklist animation |
-| 4 | **One human, one share** | about 3 min | Why verification matters; options such as World ID and ID checks; privacy trade-offs; people without phones | Icons, no real faces |
-| 5 | **Built by AI, accountable to humans** | about 3 min | How agents run the project; what always stays human; invitation to co-stewards and advisors | Screen recording of the status tracker and a pull request |
+| 1 | **Who benefits from AI-driven growth?** | about 3 minutes | The possible scale of AI-driven wealth creation; why ownership determines who benefits; the concept in one sentence; what the project is not | Presenter or voice-over with a diagram of the Connect, Contribute, Claim, Compound cycle |
+| 2 | **A fund designed to last** | about 3 minutes | The difference between spending a gift once and investing it permanently; the global index and the UN Global Compact screen; a portion of returns distributed, unclaimed amounts reinvested; the dynamic payout rule | Chart of a notional fund over time, labelled as illustrative |
+| 3 | **Why contributions are not yet accepted** | about 3 minutes | Legal structure, independent oversight, dual approval, and the public ledger; why registered charity status does not fit a universal fund | Checklist graphic |
+| 4 | **One person, one claim** | about 3 minutes | Why verification is needed; the options under consideration; privacy considerations; access for people without smartphones or identity documents | Icons; no real faces |
+| 5 | **How the project works** | about 3 minutes | The founder, volunteers, and AI agents; what always requires human approval; an invitation to volunteers and advisors | Screen recording of the status tracker and a pull request |
 
-Trump accounts and Canada's Learning Bond make good hooks for a later sixth video: "America just gave every baby $1,000 in stocks. What about everyone else?"
+A later video could compare Trump accounts and Canada's Learning Bond with the approach of Equity for Humanity.
 
-## Full script: Video 1, "If AI makes us rich, who gets the money?"
+## Script: Video 1, "Who benefits from AI-driven growth?"
 
-*About 3 minutes at a relaxed pace. Words in brackets are directions, not spoken. The founder can read this as written or in their own words.*
+*Approximately three minutes. Text in square brackets is direction and is not read aloud.*
 
-> [On screen: "Equity for Humanity. A concept. Not accepting money."]
+> [On screen: "Equity for Humanity. Concept stage. Not accepting contributions."]
 >
-> Hi. I started a small project called Equity for Humanity. I want to explain it in three minutes, and be honest about what it is and what it isn't.
+> Hello. This is a short introduction to Equity for Humanity: what it proposes, and what it is not.
 >
-> [Beat]
+> Artificial intelligence may become one of the largest sources of new wealth in history. Many researchers expect it to change how work is done across the economy. No one can be certain how large or how fast that change will be.
 >
-> Here's the question that started it. Artificial intelligence might become one of the biggest engines of wealth in history. Some people think it will do a lot of the work that people do today.
+> If new wealth is created, it will largely go to the owners of the companies that create it. That is how ownership works. So an important question is not only whether AI will increase prosperity, but who will share in it.
 >
-> If that happens, a lot of new wealth gets created. And the people who own the companies get most of it. That's how ownership works.
+> [On screen: "Who benefits?"]
 >
-> So the real question isn't only "will AI make us richer?" It's "who will own the part that gets richer?"
+> Most people in the world own few or no shares in companies. Many cannot invest, because they have no savings to spare.
 >
-> [On screen: "Who owns the future?"]
+> Equity for Humanity proposes one response.
 >
-> Right now, most people don't own much of anything in the stock market. Especially in poorer countries. They can't just "invest early." They don't have spare money.
+> [On screen: the Connect, Contribute, Claim, Compound cycle]
 >
-> So here's the idea.
+> Contributions would go into a permanent fund. Instead of being spent once, they would be invested in a broad index of companies around the world. Companies assessed as breaching the UN Global Compact's principles on human rights, labour, the environment, and anti-corruption would be excluded.
 >
-> [On screen: the four-step cycle]
+> Each year, a portion of the fund's returns would be available to verified individuals. The rest would remain invested, so that the fund can continue to grow. When average growth is stronger, distributions are higher. When growth slows, distributions are reduced, and they may fall to zero, to protect the fund. Amounts that are not claimed are reinvested.
 >
-> What if people who can afford it gave to a fund that never gets spent? Instead of spending each gift once, the fund invests it in the whole world economy. Thousands of companies, in almost every country.
+> [On screen: "What Equity for Humanity is not"]
 >
-> Then, part of what that investment earns each year is shared with people. Real, verified humans. The rest stays invested, so the fund keeps growing.
+> It is important to be clear about the current stage. Equity for Humanity is a concept. It is not a charity, and it is not an investment product. It does not accept contributions. A prototype application exists, but it uses simulated data only.
 >
-> When the world economy grows faster, people get more. When it slows down, the fund protects itself for the future.
+> This is deliberate. The legal structure, safeguards, and governance must be in place before any contribution is accepted. Some questions remain open, and they are listed publicly in our documents.
 >
-> And anything people don't claim goes back into the fund.
+> The project is led by a founder, supported by a small number of volunteers and assisted by AI agents that do the bulk of the work, to keep costs down. People approve every decision, and people will always be responsible for any funds.
 >
-> [Beat]
+> [On screen: "equityforhumanity.org/documents"]
 >
-> Now, the honest part.
+> The founding documents and the next-stage plan are published on our website. We welcome comments and corrections, and we would like to hear from people with experience in law, investment, governance, or cash-transfer programs.
 >
-> [On screen: "What E4H is not"]
+> Thank you for watching.
 >
-> Equity for Humanity is a concept. It is not a charity yet. It is not an investment. It does not take anyone's money today. There's a test app, but it only uses pretend data.
->
-> We're doing it this way on purpose. Before anyone gives a dollar, we want the legal home, the safeguards, and the rules to be right. We've even learned that some of our ideas don't fit charity law as it stands, and we've written that down publicly.
->
-> [Beat]
->
-> The project is run by one volunteer, with a lot of help from AI tools. The AI does the research, the drafts, the code. A person approves every decision, and people will always be responsible for the money.
->
-> [On screen: "equityforhumanity.org/plan"]
->
-> So here's what I'm asking. Read the plan. It's short. Then tell us what we got wrong. Or, if you know about charity law, investing, or cash programs, and you'd like to help, get in touch.
->
-> If AI is going to change everyone's future, maybe everyone should own a small piece of it.
->
-> Thanks for watching.
->
-> [End screen: "Read the plan: equityforhumanity.org/plan. Scripts and editing assisted by AI. Voice and views are the founder's."]
+> [End screen: "Documents: equityforhumanity.org/documents. Scripts and editing prepared with AI assistance."]
 
-## How agents prepare each video
+## Production process
 
-| Step | Agent work | Founder work |
+| Step | AI agent work | Founder work |
 |---|---|---|
-| 1. Script | Draft from the plan documents; keep it under 450 words; flag any claim that needs a source | Read and edit (10 minutes) |
-| 2. Recording | Provide a large-print version and a checklist (quiet room, phone at eye level, window light) | Record voice or video, one or two takes |
-| 3. Transcript and captions | Make a transcript with an open-source speech-to-text tool such as Whisper; fix names; export an SRT caption file in English and a French translation | None, or a quick French check by a volunteer |
-| 4. Editing | Write an edit list (cuts, on-screen text, diagrams); assemble in a free or low-cost editor | Approve the final cut |
-| 5. Thumbnail | Draft two simple options using the site colours and large text | Pick one |
-| 6. Description | Title, description with the honest status line, AI disclosure, links, chapters | Approve |
-| 7. Posting | Upload as private or scheduled; prepare X and LinkedIn post drafts and one Short | Click publish |
-| 8. Follow-up | Summarize comments weekly; draft replies; log useful critiques in [open questions](open-questions.md) | Approve replies |
+| 1. Script | Draft from the published documents; keep under about 450 words; identify any claim that needs a source | Review and edit |
+| 2. Recording | Provide a large-print script and a recording checklist | Record voice or video |
+| 3. Transcript and captions | Produce a transcript with open-source speech recognition software such as Whisper; correct names; export English and French caption files | None; a French-speaking volunteer reviews the translation |
+| 4. Editing | Prepare an edit list covering cuts, on-screen text, and diagrams; assemble the video | Approve the final version |
+| 5. Thumbnail | Prepare two options using the website's colours and clear text | Select one |
+| 6. Description | Title, description with the status statement and AI disclosure, links, and chapters | Approve |
+| 7. Publication | Upload as unpublished; prepare posts for X and LinkedIn and one short excerpt | Publish |
+| 8. Follow-up | Summarize comments weekly and draft replies; record substantive critiques in [open questions](open-questions.md) | Approve replies |
 
-## Measuring what works
+## Measures
 
-Track only a few numbers, monthly: views, average watch time, new subscribers, emails received, and useful critiques. The goal in Stages 0 and 1 is **conversations with the right people**, not large numbers.
+A small number of measures are reviewed monthly: views, average viewing time, subscribers, messages received, and substantive critiques. In Stages 0 and 1 the objective is informed conversations with relevant people, not audience size.

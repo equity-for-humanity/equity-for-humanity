@@ -1,104 +1,95 @@
 # Roadmap
 
-> **Working draft.** Stages are small on purpose. Each one ends with a clear checkpoint. Nothing moves to the next stage until the founder approves. No stage has a calendar deadline; the pace depends on volunteer energy and on partners.
+> **Working draft.** Each stage ends with a checkpoint. The project moves to the next stage only after the founder, and later the governing board, approves. No stage has a fixed deadline; progress depends on volunteers and partners. The sequence follows the "safe path before real capital" in the [Investment Proposal](../planning/e4h-global-human-flourishing-index-proposal-v0.2.md): concept, paper implementation, structure and advice, then an independent decision.
 
-## How to read this
+## In brief
 
-- **Owner "Agents"** means the coordinator agent and its helper agents do the work, then put the result in front of the founder for approval where marked.
-- **Owner "Founder"** means only a human can do it: sign, verify identity, open accounts, approve, or appear on camera or voice.
-- **Effort** is the founder's effort, not the agents'. "Small" is a short review or one form. "Medium" is a call or a recording session.
-- Live progress is tracked in [status](status.md).
+- **Stage 0 (current):** publish the plan, organize the work, and test the investment approach on paper.
+- **Stage 1:** recruit volunteers and advisors, obtain legal guidance, and consult similar initiatives.
+- **Stage 2:** establish a non-charity legal entity with independent oversight and financial controls.
+- **Stage 3:** following an independent governance decision, open the Humanity Fund and begin distributions under the payout rule.
 
-## Guardrails for every stage
+Costs are kept to a minimum. Free or pro bono legal help will be sought first, with a paid consultation only if absolutely necessary.
 
-1. **No money is accepted** until Stage 2 is complete, the legal home exists, and the safeguards in [operations](operations-with-agents.md) are in place.
-2. **No agent ever moves money**, signs anything, or files anything with a government.
-3. **Nothing public goes out** (posts, emails to partners, videos) without founder approval.
-4. **No personal information** about the founder in any public material.
-5. **If energy runs low, pause.** The plan is designed so that stopping at any checkpoint leaves nothing broken and no one owed money.
+## How to read this page
 
-## Stage 0: Open project (now)
+- **"Agents"** means AI agents prepare the work under the direction of a coordinator agent. The result is submitted for approval where indicated.
+- **"Founder"** or **"Volunteers"** means the task requires a person: signing, identity verification, opening accounts, approval, or appearing on camera or voice.
+- Progress is recorded in the [status tracker](status.md). How work is divided is described in [operations](operations-with-agents.md).
 
-**Goal:** a clear public plan, a working project inbox, and a simple way to track work. No money.
+## Safeguards that apply at every stage
 
-| # | Action | Owner | Founder effort |
-|---|---|---|---|
-| 0.1 | Publish this plan in the repo and on the website. | Agents draft; founder approves | Small |
-| 0.2 | Set up a project address such as hello@equityforhumanity.org that forwards to the existing project Gmail (for example with free Cloudflare Email Routing, if the domain's DNS is moved to or already on Cloudflare **[UNVERIFIED current DNS host]**). | Agents prepare steps; founder changes DNS and verifies the inbox | Small |
-| 0.3 | Turn [status](status.md) into GitHub Issues with labels (agents, founder, blocked). | Agents | None |
-| 0.4 | Add a French summary page and French versions of the home page and this plan's summary. | Agents draft; founder or a French-speaking volunteer reviews | Small |
-| 0.5 | Write a one-page "E4H in one minute" PDF for outreach, from the README summary. | Agents | Small review |
-| 0.6 | Start the "paper fund": a public spreadsheet that tracks a pretend $10,000 in one global ETF, and applies the dynamic payout rule to it each quarter. | Agents | None |
+1. **No contributions are accepted** until the legal entity, independent oversight, and financial controls described in Stage 2 are in place, as the [Founding Concept Brief](../current/equity-for-humanity-founding-concept-v1.0.md) requires.
+2. **No AI agent moves money,** signs documents, or makes filings with any government.
+3. **No public communication** (posts, correspondence with partners, or videos) is released without founder approval.
+4. **No personal information** about the founder or volunteers appears in public material without their consent.
+5. **The plan can be paused** at any checkpoint without leaving obligations outstanding.
 
-**Checkpoint to leave Stage 0:** plan is live, inbox works, task list exists.
+## Stage 0: Open project (current)
 
-## Stage 1: Find people and advice
+**Objective:** a published plan, a project inbox, a task tracker, and a paper test of the investment approach. No contributions.
 
-**Goal:** E4H stops being a one-person project, gets real feedback, and chooses a legal path. Still no money.
+| # | Action | Responsibility |
+|---|---|---|
+| 0.1 | Publish the plan and the founding documents as web pages. | Agents prepare; founder approves |
+| 0.2 | Establish a project email address on the Equity for Humanity domain that forwards to the existing project inbox. | Agents prepare the steps; founder makes the domain change |
+| 0.3 | Convert the [status tracker](status.md) into GitHub Issues. | Agents |
+| 0.4 | Prepare French versions of the home page and of this plan's summary. | Agents translate; a French-speaking volunteer reviews |
+| 0.5 | Prepare a one-page summary document for correspondence with partners. | Agents prepare; founder approves |
+| 0.6 | Begin the paper implementation described in the Investment Proposal: apply the UN Global Compact screen to the FTSE Global All Cap universe and report coverage, turnover, and limitations each quarter. Apply the dynamic payout rule to a notional fund. | Agents |
 
-| # | Action | Owner | Founder effort |
-|---|---|---|---|
-| 1.1 | Send outreach to the first 5 partners in [partners](partners-and-outreach.md), starting with Windfall Trust, GiveDirectly, and the Basic Income Canada Network. | Agents draft; founder approves and sends | Small per email |
-| 1.2 | Hold 3 to 5 short calls with people who reply. Agents prepare a one-page brief and questions before each call and a summary after. | Founder on calls; agents prepare | Medium |
-| 1.3 | Recruit 2 to 4 co-stewards or advisors (legal, finance, community, tech). Aim for at least one with charity or nonprofit governance experience. | Founder decides; agents draft role descriptions and post them | Medium |
-| 1.4 | Get one legal consultation on the questions in [legal options](legal-structure-options.md) "Where to spend on a lawyer". Try pro bono or clinic routes first. | Agents prepare the brief; founder attends | Medium |
-| 1.5 | Record the first 3 short videos from [communications](communications.md). | Agents write scripts and edit; founder records | Medium |
-| 1.6 | Decide: **Path A** (own non-profit, then charity) or **Path B** (pilot inside a partner). Log the decision in [open questions](open-questions.md). | Founder with co-stewards | Medium |
-| 1.7 | Draft governance basics: conflict-of-interest policy, two-signature money rule, investment policy (from [investing](investing.md)), privacy policy. | Agents draft; co-stewards review | Small review |
+**Checkpoint:** plan published, inbox operating, task tracker in place.
 
-**Checkpoint to leave Stage 1:** at least two co-stewards committed, one legal consult done, path chosen.
+## Stage 1: People and advice
 
-## Stage 2: Legal home and small pilot
+**Objective:** broaden participation, obtain feedback and legal guidance, and confirm the choice of structure. No contributions.
 
-**Goal:** a proper legal container and a first small, real, fully transparent fund.
+| # | Action | Responsibility |
+|---|---|---|
+| 1.1 | Contact the organizations listed first in [partners](partners-and-outreach.md), including Windfall Trust, GiveDirectly, and the Basic Income Canada Network. | Agents draft; founder approves and sends |
+| 1.2 | Hold short conversations with organizations that respond. Agents prepare a briefing note beforehand and a summary afterwards. | Founder; agents prepare |
+| 1.3 | Recruit a small number of volunteers and advisors, including at least one person with nonprofit governance experience. | Founder decides; agents draft role descriptions |
+| 1.4 | Seek free or pro bono legal guidance on the questions listed in [legal structure](legal-structure-options.md). Arrange a paid consultation only if absolutely necessary. | Agents prepare the brief; founder attends |
+| 1.5 | Record the first videos described in [communications](communications.md). | Agents prepare scripts and editing; founder records |
+| 1.6 | Confirm the non-charity structure for the core fund, and record the decision in [open questions](open-questions.md). | Founder with volunteers and advisors |
+| 1.7 | Draft governance policies: conflict of interest, compensation, dual approval of payments, investment and custody, reserves, privacy, and public reporting, as listed in the [Administration and Stewardship Principles](../current/equity-for-humanity-administration-principles-v0.1.md). | Agents draft; volunteers and advisors review |
 
-### If Path A (own organization)
+**Checkpoint:** volunteers and advisors in place, legal guidance obtained, structure confirmed.
 
-| # | Action | Owner | Founder effort |
-|---|---|---|---|
-| 2A.1 | Incorporate a non-profit (Quebec OBNL, $199, or federal CNCA, $200). Agents fill in the forms; directors sign. | Agents prepare; founder and co-directors sign and pay | Small |
-| 2A.2 | Get a CRA business number; set up a bank account needing **two signatures** for any payment. | Founder and a co-director (identity checks at the bank) | Medium |
-| 2A.3 | Apply for charitable registration with a purpose such as relieving poverty through cash transfers, plus education about shared ownership. Lawyer reviews the purposes first. | Agents draft; lawyer reviews; founder submits | Medium |
-| 2A.4 | While waiting (about 6 months), accept only **stewardship** support (Bucket B) for costs, from known supporters, with a public ledger. No Humanity Fund yet. | Co-stewards approve; agents keep ledger | Small |
-| 2A.5 | Once registered, open an organization brokerage account and start the Humanity Fund (Bucket A) under the investment policy. | Two directors | Medium |
-| 2A.6 | First payout pilot: a small, needs-based cash transfer delivered through an experienced partner. Measure and publish everything. | Partner delivers; agents report; directors approve | Medium |
+## Stage 2: Legal structure and safeguards
 
-### If Path B (partner pilot)
+**Objective:** a legal entity with independent oversight, financial controls, and public reporting.
 
-| # | Action | Owner | Founder effort |
-|---|---|---|---|
-| 2B.1 | Agree in writing with a partner organization on a pilot: who holds the money, who decides payouts, how results are published. | Founder and co-stewards negotiate; agents draft the agreement summary | Medium |
-| 2B.2 | E4H supplies design, outreach, dashboard software, and reporting. The partner holds and moves money. | Agents build; partner operates | Small |
-| 2B.3 | Incorporate a small non-profit only if needed for grants or contracts. | As 2A.1 | Small |
+| # | Action | Responsibility |
+|---|---|---|
+| 2.1 | Incorporate the chosen non-charity entity. Agents prepare the forms; directors sign and file. | Agents prepare; directors sign |
+| 2.2 | Obtain a business number and open a bank account requiring two approvals for every payment. | Two directors |
+| 2.3 | Adopt the governance policies drafted in Stage 1, including the rule that the Humanity Fund (Bucket A) is never used for administration. | Board |
+| 2.4 | Accept stewardship support (Bucket B) only from known supporters, recorded on a public ledger. The Humanity Fund does not yet accept contributions. | Board approves; agents maintain the ledger |
+| 2.5 | Select proof-of-personhood methods for a future pilot, following a privacy review. Test them with simulated data. | Agents research and prototype; board decides |
+| 2.6 | Apply for grants to cover stewardship costs, where eligibility allows. | Agents draft; founder approves and submits |
 
-### Both paths
+**Checkpoint:** entity established, controls tested, public ledger operating.
 
-| # | Action | Owner | Founder effort |
-|---|---|---|---|
-| 2.7 | Public ledger live: every dollar in and out, updated at least monthly. | Agents maintain; treasurer approves | Small |
-| 2.8 | Proof-of-personhood choice for any pilot, with a privacy review. | Agents research and prototype; directors decide | Small |
-| 2.9 | Apply for small grants for stewardship costs (Bucket B), for example from basic-income or AI-transition funders. | Agents draft; founder approves and submits | Small per grant |
+## Stage 3: Careful launch
 
-**Checkpoint to leave Stage 2:** legal home exists, two-signature controls work, first pilot results published.
+**Objective:** open the Humanity Fund in a way that maintains trust.
 
-## Stage 3: Grow carefully
+- A properly constituted governing body decides whether, and how, to implement the Investment Proposal, as the proposal requires.
+- The Humanity Fund begins accepting contributions through regulated payment channels, under published rules for cash, securities, and other approved assets.
+- Holdings, contributions, costs, and distributions are published on a public dashboard.
+- Distributions begin under the dynamic payout rule in the Founding Concept Brief. Access is widened step by step, with assisted routes for people without smartphones or identity documents.
+- Unclaimed and returned benefits are reinvested in the fund.
+- Additional entities, such as a US organization or a region-based charitable sister organization, are considered only if justified.
+- An independent review or audit is arranged once assets exceed a threshold set by the board.
 
-**Goal:** open public giving and grow reach, without losing trust.
+## Work that agents can begin immediately
 
-- Open public donations through a regulated platform, with tax receipts if registered.
-- Launch the live dashboard: holdings, contributions, payouts, costs, and fraud losses.
-- Expand payouts step by step, starting where need is greatest, and adding verification methods that work for people without smartphones or ID.
-- Add a US "friends of" charity only if US donor demand justifies the cost.
-- Revisit the universal-payout question with partners, researchers, and possibly governments.
-- Independent review or audit once assets pass a threshold set by the board.
+These tasks require only a final review:
 
-## What agents can start right away
-
-These need no founder time beyond a final look:
-
-- Keep [status](status.md) and GitHub Issues current.
+- Keep the [status tracker](status.md) and GitHub Issues current.
 - Draft the French pages.
-- Build the paper-fund spreadsheet and publish it.
-- Prepare partner briefs and email drafts.
-- Draft the first three video scripts, captions, and thumbnails.
-- Watch for changes in the facts in this plan (Trump account rules, CRA guidance, Windfall Trust news) and flag them.
+- Build and publish the paper implementation of the Investment Proposal.
+- Prepare briefing notes and draft correspondence for partners.
+- Draft video scripts, captions, and thumbnails.
+- Monitor changes to the facts cited in this plan, such as Trump account rules, CRA guidance, and developments at Windfall Trust, and flag them for review.

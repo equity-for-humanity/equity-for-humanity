@@ -1,66 +1,74 @@
-# The E4H next-stage plan
+# Equity for Humanity: next-stage plan
 
-> **Working draft, September 2026.** This is a public plan for discussion. It is not legal, tax, or financial advice. It is not an offer of any investment and not a request for donations. E4H does not accept money today. Facts were checked on 24 September 2026; anything marked **[UNVERIFIED]** still needs checking.
+> **Working draft, September 2026.** This plan is published for discussion. It is not legal, tax, or financial advice, not an offer of any investment, and not a request for donations. Equity for Humanity does not accept contributions at this stage. Facts were checked on 24 September 2026. Items marked **[UNVERIFIED]** or **[UNCERTAIN]** still require confirmation.
 
-## E4H in one minute
+## In brief
 
-Equity for Humanity (E4H) is a volunteer-run, open-source project based in Quebec, Canada. The idea is a different kind of charity:
+Equity for Humanity is a proposed permanent public-benefit fund. Its purpose is to help every human being share in a growing portion of global prosperity through universal ownership.
 
-- **Most charities spend a gift once.** E4H wants gifts to be invested in a broad "whole world" index of companies, with harmful companies screened out.
-- **The investment growth is shared with people.** Part of the returns would be paid to verified individual humans. The rest stays invested, so the money keeps working year after year.
-- **The long-term goal is everyone.** Every human being could eventually claim a small, growing share. Unclaimed amounts go back into the fund.
+- **Contributions are invested, not spent.** The fund would own a broad, globally diversified portfolio of listed companies, based on the FTSE Global All Cap Index. Companies assessed as non-compliant with the UN Global Compact's Ten Principles would be omitted.
+- **A portion of the returns is distributed.** Verified individuals could claim a portion of the fund's returns under a published, rules-based payout rule. The remainder stays invested so the fund can continue to grow.
+- **Unclaimed amounts are reinvested.** Benefits that are not claimed, or that participants choose to return, are reinvested in the fund.
+- **The long-term aim is universal.** Every person should eventually be able to take part, without having to prove need.
 
-Today E4H is a concept, a website, and a private test app that uses only pretend data. It has no legal entity, no bank account, and no money. That is deliberate: we want the rules, safeguards, and legal home to be right before anyone gives a dollar.
+Equity for Humanity is at the concept stage. It has a public website, a set of founding documents, and a private prototype application that uses simulated data only. It has no legal entity, no bank account, and holds no funds. This is deliberate: the legal structure, safeguards, and governance must be in place before any contribution is accepted.
 
-For the full concept, see the [founding concept brief](../current/equity-for-humanity-founding-concept-v1.0.md), the [administration principles](../current/equity-for-humanity-administration-principles-v0.1.md), and the [investment proposal](../planning/e4h-global-human-flourishing-index-proposal-v0.2.md).
+The project is led by a founder, supported by a small number of volunteers and assisted by AI agents that do the bulk of the work, to keep costs down.
 
-## The plan on one page
+## Founding documents
 
-**Who does the work.** One volunteer founder with limited time, helped by AI agents. Agents research, draft, build, and organize. The founder only does what truly needs a human: signing, identity checks, bank accounts, final approvals, and appearing on camera or voice.
+The founding documents set out the concept and principles. **Where this plan and a founding document differ, the founding document takes precedence.**
 
-**The simplest path, in four small stages:**
+- [Founding Concept Brief](../current/equity-for-humanity-founding-concept-v1.0.md): mission, principles, mechanism, and key elements.
+- [Administration and Stewardship Principles](../current/equity-for-humanity-administration-principles-v0.1.md): how resources are separated, stewarded, reported, and governed.
+- [Investment Proposal](../planning/e4h-global-human-flourishing-index-proposal-v0.2.md) (Global Human-Flourishing Index Proposal): the reference index and the UN Global Compact conduct screen.
 
-| Stage | What it means | Money involved | Cost to E4H |
-|---|---|---|---|
-| **0. Open project** (now) | Publish the plan, set up a project inbox, keep building in public. | None. No donations accepted. | About $0 |
-| **1. Find people and advice** | Recruit 2 to 4 co-stewards and advisors, get one legal consult, talk to aligned groups such as Windfall Trust, test the fund "on paper". | None. | $0 to about $300 |
-| **2. Legal home and small pilot** | Create a non-profit, then decide on charity status, *or* run a pilot inside a partner organization. First small real fund with strict safeguards. | Small, from known supporters only. | About $250 to $1,500 plus any legal fees |
-| **3. Grow carefully** | Public donations, a public ledger and dashboard, first payouts under clear rules, more partners. | Growing. | Paid from stewardship grants, never from the fund |
+## The plan in stages
 
-The full step-by-step list is in the [roadmap](roadmap.md). What is done and what is next is in the [status tracker](status.md).
+| Stage | Purpose | Contributions accepted |
+|---|---|---|
+| **0. Open project** (current) | Publish the plan, establish a project inbox and task tracker, and test the investment approach on paper. | None |
+| **1. People and advice** | Recruit volunteers and advisors, obtain legal guidance on the proposed structure, and consult similar initiatives. | None |
+| **2. Legal structure and safeguards** | Establish a non-charity legal entity, independent oversight, dual-approval financial controls, and a public ledger. | Stewardship support only, from known supporters |
+| **3. Careful launch** | Following an independent governance decision, open the Humanity Fund, publish holdings, and begin distributions under the payout rule. | Public contributions, under published rules |
 
-## Five things the research changed
+Costs are kept to a minimum. Free or pro bono legal help will be sought first, with a paid consultation only if absolutely necessary.
 
-1. **A registered charity cannot pay everyone.** Canadian charity law allows "relief of poverty" only for people who are *currently* in poverty. Payments to everyone, rich or poor, would count as private benefit. The US has a similar rule. So a charity can run a needs-based pilot, but the universal vision needs a different path over time. See [legal options](legal-structure-options.md).
-2. **Someone else is building a global dividend fund.** Windfall Trust, a nonprofit that grew out of the Future of Life Institute, says it plans a legal entity, an endowment, and a first distribution within about 18 months. E4H should talk to them early and look for ways to help rather than compete. See [partners](partners-and-outreach.md).
-3. **Opt-in programs leave the neediest behind.** Canada's Learning Bond reached only 43% of eligible children after almost 20 years. A September 2026 survey found only 5% of eligible lower-income US families had opened a Trump account. E4H's "claim it if you want it" design needs strong outreach and help from trusted local groups. See [Trump accounts](trump-accounts.md).
-4. **Where the fund is held matters for tax.** A US court ruled in August 2026 that a Canadian charity holding US stocks through a Canadian fund does not get the treaty exemption from US tax on dividends. Which exchange-traded fund (ETF) to hold is a real decision, not a detail. See [investing](investing.md).
-5. **The website probably needs French.** Quebec's language law requires public commercial content from Quebec organizations to be available in French. Truly non-commercial content may be exempt, but this is unclear for E4H. See [open questions](open-questions.md).
+Detailed actions and responsibilities are in the [roadmap](roadmap.md). Progress is recorded in the [status tracker](status.md).
 
-## The documents
+## Key findings from the research
 
-| Document | What it covers |
+1. **Registered charity status does not fit the core fund.** In Canada, charities that relieve poverty must direct benefits to people in need. The core fund is universal and has no means test. The core fund is therefore planned as a non-charity structure. See [legal structure](legal-structure-options.md).
+2. **Similar initiatives exist.** Windfall Trust, a nonprofit that emerged from work at the Future of Life Institute, is developing a global dividend fund with a comparable aim. Equity for Humanity intends to learn from it and, where appropriate, explore working together. See [partners](partners-and-outreach.md).
+3. **Opt-in programs often miss the people who most need them.** Canada's Learning Bond reached 43.1% of eligible children in 2023. A September 2026 survey found that about 5% of eligible lower- and moderate-income US families had opened a Trump account. Outreach and assisted access will be essential. See [Trump accounts](trump-accounts.md).
+4. **No off-the-shelf fund applies the proposed screen.** Broad index funds do not apply the UN Global Compact screen described in the Investment Proposal. How the screen is implemented is a decision for a future governing body. See [investing](investing.md).
+5. **French-language requirements may apply.** Quebec's Charter of the French Language requires certain public content from organizations established in Quebec to be available in French. Whether it applies to a non-commercial project is uncertain. See [open questions](open-questions.md).
+
+## Plan documents
+
+| Document | Contents |
 |---|---|
-| [Roadmap](roadmap.md) | Stages 0 to 3, concrete next actions, and who does each one |
-| [Status](status.md) | Done, next, and owner tracker, kept up to date |
-| [Legal structure options](legal-structure-options.md) | Legal options compared, key regulatory issues, and a recommended path |
-| [Investing](investing.md) | Global index options, custody, and a simple early investment policy |
-| [Trump accounts](trump-accounts.md) | The new US child investment accounts and what E4H can learn |
-| [Partners and outreach](partners-and-outreach.md) | Well-matched partners, what to ask each one, and draft emails |
-| [Operations with agents](operations-with-agents.md) | How AI agents run day-to-day work, and what always stays human |
-| [Communications](communications.md) | Channel plan, first video series, and a script the founder can read |
-| [Open questions](open-questions.md) | Decisions log, unknowns, and gaps still to solve |
+| [Roadmap](roadmap.md) | Stages, next actions, and responsibilities |
+| [Status](status.md) | Completed, upcoming, and blocked items |
+| [Legal structure](legal-structure-options.md) | Options compared, regulatory considerations, and the proposed structure |
+| [Investing](investing.md) | Implementing the Investment Proposal: indexes, custody, and safeguards |
+| [Trump accounts](trump-accounts.md) | The US child investment accounts and the lessons they offer |
+| [Partners and outreach](partners-and-outreach.md) | Organizations to learn from and possibly work with, and draft correspondence |
+| [Operations](operations-with-agents.md) | How work is organized, and what always requires human approval |
+| [Communications](communications.md) | Channels, the first video series, and publication rules |
+| [Open questions](open-questions.md) | Decisions taken, questions still open, and known gaps |
 
-## Words used in this plan
+## Terms used in this plan
 
-- **Agent:** an AI assistant that can do multi-step tasks, like drafting a document or updating the website.
-- **Coordinator agent:** the one agent that keeps the task list, assigns work to helper agents, and prepares items for the founder to approve.
-- **Index fund / ETF:** a fund that buys a whole market in one product. An ETF (exchange-traded fund) trades on a stock exchange like a share.
-- **Fiscal sponsor:** an existing organization that lets a project use its legal and banking setup.
-- **Registered charity:** an organization approved by the Canada Revenue Agency (CRA) that can issue tax receipts.
-- **Non-profit (NPO):** an organization that does not operate for profit. In Canada it usually pays no income tax but cannot issue tax receipts.
-- **Proof of personhood:** a way to check that an account belongs to one real, unique human, without necessarily knowing who they are.
+- **Humanity Fund (Bucket A):** the permanent fund that is invested and from which distributions are made. It is never used for administration.
+- **Stewardship and Operations Reserve (Bucket B):** the separate budget for legal, governance, technology, and reporting costs.
+- **Index fund or ETF:** a fund that holds a whole market according to published rules. An exchange-traded fund (ETF) trades on a stock exchange.
+- **UN Global Compact:** a United Nations initiative whose Ten Principles cover human rights, labour, the environment, and anti-corruption.
+- **Registered charity:** an organization registered with the Canada Revenue Agency (CRA) that may issue official donation receipts.
+- **Not-for-profit organization:** an organization that does not operate for profit. In Canada it is generally exempt from income tax but cannot issue donation receipts.
+- **Proof of personhood:** a method of confirming that an account belongs to one real, unique person, ideally without revealing that person's identity.
+- **AI agent:** software that can carry out multi-step tasks, such as drafting a document or preparing a website update, under human supervision.
 
-## How to help or comment
+## Comments and corrections
 
-Email [equityforhumanityfund@gmail.com](mailto:equityforhumanityfund@gmail.com) or open an issue on [GitHub](https://github.com/equity-for-humanity/equity-for-humanity/issues). Corrections to any fact in these documents are especially welcome.
+Comments and corrections are welcome at [equityforhumanityfund@gmail.com](mailto:equityforhumanityfund@gmail.com) or through a [GitHub issue](https://github.com/equity-for-humanity/equity-for-humanity/issues).
