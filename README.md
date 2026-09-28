@@ -20,17 +20,6 @@ The prototype remains simulated only: no real money, identity proof, payments, w
 
 Preview the brochure without Cloudflare: open the HTML files locally, or run a static server from the repo root (`python3 -m http.server 4173`) and visit `http://127.0.0.1:4173/`.
 
-## Document pages
-
-The founding documents (`docs/current/`, `docs/planning/`) and the next-stage plan (`docs/plan/`) are published as web pages in `documents/*.html`, generated from the markdown sources. After editing any of those markdown files:
-
-```bash
-node scripts/build-document-pages.mjs              # regenerate documents/*.html
-node --test scripts/build-document-pages.test.mjs  # converter tests + stale-page check
-```
-
-The generator has no dependencies and reuses `assets/site.css`. Commit both the markdown and the regenerated HTML. New documents must also be added to `DOCUMENTS` in the script and to the allowlist in `.gitignore`.
-
 ## Running the canonical prototype
 
 ```bash
@@ -48,7 +37,7 @@ GitHub Pages is the brochure. Cloudflare Pages is the hosted fictional private-b
 
 | Surface | How it goes live | This repo push |
 | --- | --- | --- |
-| `index.html`, `about.html`, `documents/` | GitHub Pages from `main` | Updates the public site |
+| `index.html`, `about.html` | GitHub Pages from `main` | Updates the public site |
 | `prototype-app/` | Separate Cloudflare Pages project `equity-for-humanity-private-beta` | Does **not** deploy |
 
 Do not run `wrangler pages deploy` (or any production Cloudflare publish) unless a hosted-beta update is explicitly approved. This repository must not contain private data, `.env` files, or the beta access-code secret.
@@ -80,7 +69,6 @@ Project documents are organized under `docs/`:
 
 - `docs/current/` — current concept brief, Word doc, and philosophy/scale note.
 - `docs/planning/` — app prompts and next-step planning.
-- `docs/plan/` — the public next-stage plan (working draft). Together with the founding documents, it is published as web pages in `documents/`.
 - `docs/setup/` — account and GitHub Pages setup notes.
 - `docs/archive/` — older document versions and timestamped local backups.
 

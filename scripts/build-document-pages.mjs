@@ -276,6 +276,7 @@ function pageTemplate({ title, description, bodyHtml, headings, doc, index }) {
   <link rel="alternate icon" type="image/png" href="../assets/equity-for-humanity-logo.png" />
   <meta name="description" content="${escapeHtml(description)}" />
   <link rel="stylesheet" href="../assets/site.css" />
+  <link rel="stylesheet" href="../assets/documents.css" />
 </head>
 <body class="doc-page">
 <!-- Generated from ${doc.src} by scripts/build-document-pages.mjs. Edit the markdown, then rebuild. -->
