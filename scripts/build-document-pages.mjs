@@ -1,32 +1,53 @@
 #!/usr/bin/env node
-// Builds the public web versions of docs/plan/*.md into plan/*.html.
-// Zero dependencies: supports the small markdown subset used in docs/plan.
+// Builds the public web versions of the founding documents and the
+// next-stage plan (markdown under docs/) into documents/*.html.
+// Zero dependencies: supports the small markdown subset used in those files.
 //
-//   node scripts/build-plan-pages.mjs          write plan/*.html
-//   node scripts/build-plan-pages.mjs --check  fail if plan/*.html is stale
+//   node scripts/build-document-pages.mjs          write documents/*.html
+//   node scripts/build-document-pages.mjs --check  fail if documents/*.html is stale
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SRC_DIR = join(ROOT, "docs", "plan");
-const OUT_DIR = join(ROOT, "plan");
+const OUT_DIR = join(ROOT, "documents");
 const REPO_URL = "https://github.com/equity-for-humanity/equity-for-humanity";
 
-// Order and short descriptions for the Documents index and prev/next links.
+// Order, grouping, and short descriptions for the Documents index and prev/next links.
+// Founding documents take precedence over the plan, so they are listed first.
 export const DOCUMENTS = [
-  { file: "README.md", slug: "index", short: "Start here", summary: "One-page summary of the project and the plan." },
-  { file: "roadmap.md", slug: "roadmap", short: "Roadmap", summary: "Small stages, concrete next actions, and who does each one." },
-  { file: "status.md", slug: "status", short: "Status", summary: "Done, next, and owner tracker. Updated as work happens." },
-  { file: "legal-structure-options.md", slug: "legal-structure-options", short: "Legal options", summary: "Legal and organizational options compared, with a simplest-to-start path." },
-  { file: "investing.md", slug: "investing", short: "Investing", summary: "Global index options, custody, and a simple early investment policy." },
-  { file: "trump-accounts.md", slug: "trump-accounts", short: "Trump accounts", summary: "What the new US child accounts are and what E4H can learn from them." },
-  { file: "partners-and-outreach.md", slug: "partners-and-outreach", short: "Partners", summary: "Well-matched partners, what to ask each, and outreach drafts." },
-  { file: "operations-with-agents.md", slug: "operations-with-agents", short: "Operations", summary: "How AI agents run day-to-day work, and what always stays human." },
-  { file: "communications.md", slug: "communications", short: "Communications", summary: "Channel plan, first video series, and a script the founder can read." },
-  { file: "open-questions.md", slug: "open-questions", short: "Open questions", summary: "Decisions log, unknowns, and gaps still to solve." },
+  { src: "docs/plan/README.md", slug: "index", group: "plan", short: "Overview", summary: "Summary of the project and the next-stage plan." },
+  { src: "docs/current/equity-for-humanity-founding-concept-v1.0.md", slug: "founding-concept", group: "founding", short: "Founding Concept Brief", summary: "The mission, principles, mechanism, and key elements of Equity for Humanity." },
+  { src: "docs/current/equity-for-humanity-administration-principles-v0.1.md", slug: "administration-principles", group: "founding", short: "Administration Principles", summary: "How resources are to be stewarded, separated, reported, and governed." },
+  { src: "docs/planning/e4h-global-human-flourishing-index-proposal-v0.2.md", slug: "investment-proposal", group: "founding", short: "Investment Proposal", summary: "The reference index and the UN Global Compact conduct screen." },
+  { src: "docs/plan/roadmap.md", slug: "roadmap", group: "plan", short: "Roadmap", summary: "Stages, next actions, and responsibilities." },
+  { src: "docs/plan/status.md", slug: "status", group: "plan", short: "Status", summary: "Completed, upcoming, and blocked items." },
+  { src: "docs/plan/legal-structure-options.md", slug: "legal-structure-options", group: "plan", short: "Legal structure", summary: "Legal and organizational options, and the proposed structure." },
+  { src: "docs/plan/investing.md", slug: "investing", group: "plan", short: "Investing", summary: "Implementing the investment approach: indexes, custody, and safeguards." },
+  { src: "docs/plan/trump-accounts.md", slug: "trump-accounts", group: "plan", short: "Trump accounts", summary: "The US child investment accounts and the lessons they offer." },
+  { src: "docs/plan/partners-and-outreach.md", slug: "partners-and-outreach", group: "plan", short: "Partners", summary: "Organizations to learn from and possibly work with." },
+  { src: "docs/plan/operations-with-agents.md", slug: "operations-with-agents", group: "plan", short: "Operations", summary: "How work is organized, and what always requires human approval." },
+  { src: "docs/plan/communications.md", slug: "communications", group: "plan", short: "Communications", summary: "Channels, the first video series, and publication rules." },
+  { src: "docs/plan/open-questions.md", slug: "open-questions", group: "plan", short: "Open questions", summary: "Decisions taken, questions still open, and known gaps." },
 ];
+
+const GROUPS = {
+  founding: {
+    heading: "Founding documents",
+    eyebrow: "Founding document",
+    disclaimer:
+      "<strong>Founding document.</strong> This document sets out the concept and principles of Equity for Humanity. Where the next-stage plan and a founding document differ, the founding document takes precedence. It is not legal, tax, or financial advice, not an offer of any investment, and not a request for donations.",
+  },
+  plan: {
+    heading: "Next-stage plan (working draft)",
+    eyebrow: "Next-stage plan — working draft",
+    disclaimer:
+      "<strong>Working draft.</strong> The next-stage plan is published for discussion and follows the founding documents. It is not legal, tax, or financial advice, not an offer of any investment, and not a request for donations. Facts were checked on the dates shown, and anything marked unverified or uncertain still requires confirmation.",
+  },
+};
+
+let currentSource = "docs/plan/README.md";
 
 const escapeHtml = (s) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -42,14 +63,14 @@ export function slugify(text) {
     .replace(/-+/g, "-");
 }
 
-export function rewriteHref(href) {
+export function rewriteHref(href, fromSrc = currentSource) {
   if (/^(https?:|mailto:|#)/.test(href)) return href;
   const [path, hash = ""] = href.split("#");
   const suffix = hash ? `#${hash}` : "";
-  const doc = DOCUMENTS.find((d) => d.file === path);
-  if (doc) return `${doc.slug === "index" ? "index" : doc.slug}.html${suffix}`;
-  const repoPath = posix.normalize(posix.join("docs/plan", path));
+  const repoPath = posix.normalize(posix.join(posix.dirname(fromSrc), path));
   if (repoPath.startsWith("..")) return href;
+  const doc = DOCUMENTS.find((d) => d.src === repoPath);
+  if (doc) return `${doc.slug}.html${suffix}`;
   return `${REPO_URL}/blob/main/${repoPath}${suffix}`;
 }
 
@@ -66,6 +87,10 @@ export function inline(text) {
     const external = /^https?:/.test(target) ? ' rel="noopener"' : "";
     return `<a href="${escapeHtml(target)}"${external}>${label}</a>`;
   });
+  out = out.replace(
+    /(^|[\s(])(https?:\/\/[^\s<]*[^\s<.,;:!?)])/g,
+    (_, pre, url) => `${pre}<a href="${url}" rel="noopener">${url}</a>`
+  );
   out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   out = out.replace(/(^|[\s(])\*([^*\s][^*]*)\*(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>");
   out = out.replace(/(^|[\s(])_([^_\s][^_]*)_(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>");
@@ -201,9 +226,9 @@ export function markdownToHtml(md) {
 }
 
 const navLinks = (active) => `
-      <a href="../about.html">About</a>
+      <a href="../about.html">Our story</a>
       <a href="../index.html#mechanism">Mechanism</a>
-      <a href="index.html"${active ? ' aria-current="page"' : ""}>Plan</a>
+      <a href="index.html"${active ? ' aria-current="page"' : ""}>Documents</a>
       <a class="button secondary" href="../index.html#next">Next steps</a>
       <a href="../index.html#contact">Contact</a>`;
 
@@ -211,21 +236,24 @@ function pageTemplate({ title, description, bodyHtml, headings, doc, index }) {
   const pos = DOCUMENTS.indexOf(doc);
   const prev = DOCUMENTS[pos - 1];
   const next = DOCUMENTS[pos + 1];
+  const group = GROUPS[doc.group];
   const hrefFor = (d) => `${d.slug}.html`;
   const toc = headings.filter((h) => h.level === 2);
   const docList = DOCUMENTS.map(
     (d) =>
       `<li><a href="${hrefFor(d)}"${d === doc ? ' aria-current="page"' : ""}>${escapeHtml(d.short)}</a></li>`
   ).join("");
-  const cards = index
-    ? `<section class="doc-cards" aria-labelledby="documents"><div class="wrap">
-      <div class="kicker" id="documents">Documents</div>
-      <div class="grid doc-grid">${DOCUMENTS.filter((d) => d !== doc)
+  const cardGroup = (key) => `
+      <h2 class="doc-group-title">${escapeHtml(GROUPS[key].heading)}</h2>
+      <div class="grid doc-grid">${DOCUMENTS.filter((d) => d.group === key && d !== doc)
         .map(
           (d) =>
             `<a class="card doc-card" href="${hrefFor(d)}"><h3>${escapeHtml(d.short)}</h3><p>${escapeHtml(d.summary)}</p></a>`
         )
-        .join("")}</div>
+        .join("")}</div>`;
+  const cards = index
+    ? `<section class="doc-cards" aria-labelledby="documents"><div class="wrap">
+      <div class="kicker" id="documents">Documents</div>${cardGroup("founding")}${cardGroup("plan")}
     </div></section>`
     : "";
   const tocHtml =
@@ -243,14 +271,14 @@ function pageTemplate({ title, description, bodyHtml, headings, doc, index }) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(title)} — Equity for Humanity plan</title>
+  <title>${escapeHtml(title)} — Equity for Humanity</title>
   <link rel="icon" type="image/svg+xml" href="../assets/equity-for-humanity-logo.svg" />
   <link rel="alternate icon" type="image/png" href="../assets/equity-for-humanity-logo.png" />
   <meta name="description" content="${escapeHtml(description)}" />
   <link rel="stylesheet" href="../assets/site.css" />
 </head>
 <body class="doc-page">
-<!-- Generated from docs/plan/${doc.file} by scripts/build-plan-pages.mjs. Edit the markdown, then rebuild. -->
+<!-- Generated from ${doc.src} by scripts/build-document-pages.mjs. Edit the markdown, then rebuild. -->
 <header>
   <nav class="wrap" aria-label="Primary navigation">
     <a class="brand" href="../index.html"><div class="mark" aria-hidden="true"></div>Equity for Humanity</a>
@@ -262,9 +290,9 @@ function pageTemplate({ title, description, bodyHtml, headings, doc, index }) {
 <main id="top">
   <section class="hero doc-hero">
     <div class="wrap">
-      <div class="eyebrow"><span></span>Next-stage plan — working draft</div>
-      <p class="status-disclaimer"><strong>Working draft.</strong> These documents are a public plan for discussion. They are not legal, tax, or financial advice, not an offer of any investment, and not a request for donations. Facts were checked on the dates shown; anything marked unverified still needs checking.</p>
-      <nav class="doc-switcher" aria-label="Plan documents"><ol>${docList}</ol></nav>
+      <div class="eyebrow"><span></span>${escapeHtml(group.eyebrow)}</div>
+      <p class="status-disclaimer">${group.disclaimer}</p>
+      <nav class="doc-switcher" aria-label="Documents"><ol>${docList}</ol></nav>
     </div>
   </section>
 ${cards}
@@ -277,7 +305,7 @@ ${bodyHtml}
     </div>
     <div class="wrap doc-foot">
       ${pager}
-      <p class="doc-source">Source: <a href="${REPO_URL}/blob/main/docs/plan/${doc.file}" rel="noopener">docs/plan/${doc.file}</a> on GitHub. Suggestions welcome by email or GitHub issue.</p>
+      <p class="doc-source">Source: <a href="${REPO_URL}/blob/main/${doc.src}" rel="noopener">${doc.src}</a> on GitHub. Corrections and comments are welcome by email or through a GitHub issue.</p>
     </div>
   </article>
 </main>
@@ -286,8 +314,8 @@ ${bodyHtml}
   <div class="wrap">
     <div><strong>Equity for Humanity</strong> — A founding public concept to help every human being share in this generational AI transformation, so all of humanity can benefit and flourish.</div>
     <div class="footer-links">
-      <a href="../about.html">About</a>
-      <a href="index.html"${index ? ' aria-current="page"' : ""}>Plan</a>
+      <a href="../about.html">Our story</a>
+      <a href="index.html"${index ? ' aria-current="page"' : ""}>Documents</a>
       <a href="../index.html#contact">Contact</a>
     </div>
   </div>
@@ -298,6 +326,7 @@ ${bodyHtml}
 }
 
 export function buildPage(doc, md) {
+  currentSource = doc.src;
   const { html, headings } = markdownToHtml(md);
   const h1 = headings.find((h) => h.level === 1);
   const title = h1 ? h1.html.replace(/<[^>]+>/g, "") : doc.short;
@@ -316,7 +345,7 @@ function main() {
   mkdirSync(OUT_DIR, { recursive: true });
   const stale = [];
   for (const doc of DOCUMENTS) {
-    const md = readFileSync(join(SRC_DIR, doc.file), "utf8");
+    const md = readFileSync(join(ROOT, doc.src), "utf8");
     const html = buildPage(doc, md);
     const outPath = join(OUT_DIR, `${doc.slug}.html`);
     if (check) {
@@ -327,10 +356,10 @@ function main() {
     }
   }
   if (check && stale.length) {
-    console.error(`Stale plan pages (run node scripts/build-plan-pages.mjs):\n${stale.join("\n")}`);
+    console.error(`Stale document pages (run node scripts/build-document-pages.mjs):\n${stale.join("\n")}`);
     process.exit(1);
   }
-  if (check) console.log("plan pages are up to date");
+  if (check) console.log("document pages are up to date");
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();

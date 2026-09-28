@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { markdownToHtml, inline, rewriteHref, slugify, buildPage, DOCUMENTS } from "./build-plan-pages.mjs";
+import { markdownToHtml, inline, rewriteHref, slugify, buildPage, DOCUMENTS } from "./build-document-pages.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -14,13 +14,24 @@ test("inline formatting escapes HTML and renders emphasis, code, and links", () 
     inline("<https://example.org/a>"),
     '<a href="https://example.org/a">https://example.org/a</a>'
   );
+  assert.equal(
+    inline("See https://example.org/a_b."),
+    'See <a href="https://example.org/a_b" rel="noopener">https://example.org/a_b</a>.'
+  );
   assert.equal(inline("file_name_here stays"), "file_name_here stays");
 });
 
-test("links to other plan docs become html pages; other repo paths go to GitHub", () => {
-  assert.equal(rewriteHref("README.md"), "index.html");
-  assert.equal(rewriteHref("status.md"), "status.html");
-  assert.match(rewriteHref("../current/equity-for-humanity-founding-concept-v1.0.md"), /github\.com\/.*\/blob\/main\/docs\/current\//);
+test("links between published documents become pages; other repo paths go to GitHub", () => {
+  assert.equal(rewriteHref("README.md", "docs/plan/roadmap.md"), "index.html");
+  assert.equal(rewriteHref("status.md", "docs/plan/roadmap.md"), "status.html");
+  assert.equal(
+    rewriteHref("../current/equity-for-humanity-founding-concept-v1.0.md", "docs/plan/README.md"),
+    "founding-concept.html"
+  );
+  assert.match(
+    rewriteHref("../current/equity-for-humanity-philosophy-and-scale-v1.5.md", "docs/plan/README.md"),
+    /github\.com\/.*\/blob\/main\/docs\/current\//
+  );
   assert.equal(rewriteHref("mailto:a@b.c"), "mailto:a@b.c");
 });
 
@@ -65,12 +76,13 @@ test("slugify keeps accented letters and drops punctuation", () => {
   assert.equal(slugify("Stage 1: Québec OBNL (optional)"), "stage-1-québec-obnl-optional");
 });
 
-test("every plan document builds and committed pages are up to date", () => {
+test("every document builds with the right disclaimer and committed pages are up to date", () => {
   for (const doc of DOCUMENTS) {
-    const md = readFileSync(join(ROOT, "docs", "plan", doc.file), "utf8");
+    const md = readFileSync(join(ROOT, doc.src), "utf8");
     const html = buildPage(doc, md);
     assert.match(html, /not legal, tax, or financial advice/);
-    const committed = readFileSync(join(ROOT, "plan", `${doc.slug}.html`), "utf8");
-    assert.equal(committed, html, `plan/${doc.slug}.html is stale; run node scripts/build-plan-pages.mjs`);
+    assert.match(html, doc.group === "founding" ? /Founding document\./ : /Working draft\./);
+    const committed = readFileSync(join(ROOT, "documents", `${doc.slug}.html`), "utf8");
+    assert.equal(committed, html, `documents/${doc.slug}.html is stale; run node scripts/build-document-pages.mjs`);
   }
 });
