@@ -26,6 +26,18 @@ WORKING_NOTES.md
 !docs/current/equity-for-humanity-philosophy-and-scale-v1.5.md
 /docs/planning/*
 !docs/planning/e4h-global-human-flourishing-index-proposal-v0.2.md
+!/docs/plan/
+/docs/plan/*
+!docs/plan/README.md
+!docs/plan/roadmap.md
+!docs/plan/status.md
+!docs/plan/legal-structure-options.md
+!docs/plan/investing.md
+!docs/plan/trump-accounts.md
+!docs/plan/partners-and-outreach.md
+!docs/plan/operations-with-agents.md
+!docs/plan/communications.md
+!docs/plan/open-questions.md
 
 # Local agent/tool state, private working assets, and personal documents.
 /.agents/
